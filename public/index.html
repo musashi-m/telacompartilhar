@@ -220,7 +220,13 @@
             <video id="remote-video" class="video-stream" autoplay playsinline muted></video>
             
             <!-- Áudio Remoto do Sistema -->
-            <audio id="remote-audio" autoplay></audio>
+            <audio id="remote-audio" autoplay playsinline></audio>
+
+            <!-- Botão Flutuante de Ativação de Áudio (caso bloqueado pelo navegador) -->
+            <button id="btn-unmute-audio" class="btn-unmute-overlay" style="display: none;" title="Clique para liberar o som da transmissão">
+              <span class="material-symbols-outlined" style="font-size: 18px;">volume_off</span>
+              <span>Clique para ativar o áudio</span>
+            </button>
 
             <!-- Placeholder quando NINGUÉM estiver transmitindo -->
             <div class="placeholder-stage" id="placeholder-stage">

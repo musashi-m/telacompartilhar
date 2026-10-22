@@ -112,6 +112,7 @@
     // Vídeo & Stage
     remoteVideo: document.getElementById('remote-video'),
     remoteAudio: document.getElementById('remote-audio'),
+    btnUnmuteAudio: document.getElementById('btn-unmute-audio'),
     placeholderStage: document.getElementById('placeholder-stage'),
     placeholderTitle: document.getElementById('placeholder-title'),
     placeholderDesc: document.getElementById('placeholder-desc'),
@@ -566,19 +567,40 @@
         };
 
         dom.remoteVideo.onloadedmetadata = () => {
-          const w = dom.remoteVideo.videoWidth;
-          const h = dom.remoteVideo.videoHeight;
-          if (w && h) {
-            dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
+        // Se o stream de vídeo também trouxer trilha de áudio embutida
+        if (event.streams && event.streams[0]) {
+          const audioTracks = event.streams[0].getAudioTracks();
+          if (audioTracks.length > 0 && (!dom.remoteAudio.srcObject || !dom.remoteAudio.srcObject.active)) {
+            console.log('[Audio] Trilha de som identificada no stream de vídeo.');
+            dom.remoteAudio.srcObject = new MediaStream(audioTracks);
+            dom.remoteAudio.muted = false;
+            dom.remoteAudio.volume = 1.0;
+            dom.remoteAudio.play().then(hideUnmuteOverlay).catch(showUnmuteOverlay);
           }
-          safePlay();
-        };
+        }
 
         startTelemetryStats(pc);
       } else if (event.track.kind === 'audio') {
+        console.log('[P2P] Trilha de áudio remota recebida explicitamente!');
         const audioStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
         dom.remoteAudio.srcObject = audioStream;
-        dom.remoteAudio.play().catch(e => console.log('[Audio] Autoplay áudio:', e));
+        dom.remoteAudio.muted = false;
+        dom.remoteAudio.volume = 1.0;
+
+        const tryPlayAudio = () => {
+          dom.remoteAudio.play()
+            .then(() => {
+              console.log('[Audio] Áudio tocando com sucesso!');
+              hideUnmuteOverlay();
+            })
+            .catch(err => {
+              console.warn('[Audio] Autoplay de áudio bloqueado pelo navegador, aguardando interação do usuário:', err);
+              showUnmuteOverlay();
+            });
+        };
+
+        tryPlayAudio();
+        event.track.onunmute = tryPlayAudio;
       }
     };
 
@@ -734,12 +756,27 @@
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-          sampleRate: 48000
+          suppressLocalAudioPlayback: false
         } : false
       };
 
       console.log('[ScreenShare] Solicitando getDisplayMedia com constraints:', displayConstraints);
-      const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints);
+      } catch (err) {
+        // Fallback: se o navegador rejeitar o objeto de áudio avançado, tenta com audio: true simples
+        if (state.preferences.systemAudio && err.name !== 'NotAllowedError') {
+          console.warn('[ScreenShare] Falha com constraints detalhadas de áudio, tentando com audio: true...');
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: displayConstraints.video,
+            audio: true
+          });
+        } else {
+          throw err;
+        }
+      }
+
       state.screenStream = stream;
       state.isBroadcasting = true;
 
@@ -761,9 +798,9 @@
 
       // Verificação amigável de áudio do sistema
       if (state.preferences.systemAudio && audioTracks.length === 0) {
-        showToast('Áudio do sistema não compartilhado na janela selecionada. A transmissão seguirá com vídeo.', 'warn', 5000);
+        showToast('Aviso: Áudio não selecionado. Ao escolher a tela/aba no popup do navegador, marque a caixa "Compartilhar áudio" para transmitir o som.', 'warn', 8000);
       } else if (audioTracks.length > 0) {
-        showToast('Áudio do sistema capturado com sucesso.', 'ok');
+        showToast(`Áudio do sistema capturado com sucesso (${audioTracks.length} trilha).`, 'ok');
       }
 
       // Mostra preview local (mutado para evitar eco)
@@ -920,17 +957,58 @@
         dom.labelCtrlMic.textContent = 'Voz On';
         showToast('Microfone ativado.', 'ok');
 
-        // Se estiver transmitindo, adiciona mic às conexões existentes
+        // Se estiver transmitindo, adiciona mic e renegocia para os espectadores ouvirem
         if (state.isBroadcasting) {
           for (const [peerId, pc] of state.peerConnections.entries()) {
-            stream.getTracks().forEach(track => {
-              pc.addTrack(track, stream);
-            });
+            try {
+              stream.getTracks().forEach(track => {
+                pc.addTrack(track, stream);
+              });
+              pc.createOffer().then(offer => {
+                return pc.setLocalDescription(offer);
+              }).then(() => {
+                return sendRequest('rtcOffer', {
+                  targetPeerId: peerId,
+                  offer: pc.localDescription.toJSON()
+                });
+              }).catch(err => console.warn('[Mic] Erro na renegociação de mic:', err));
+            } catch (e) {
+              console.warn('[Mic] Erro ao adicionar track de mic:', e);
+            }
           }
         }
       }
     } catch (err) {
       showToast(`Não foi possível acessar o microfone: ${err.message}`, 'error');
+    }
+  }
+
+  // ========================================================================
+  // CONTROLE E DESBLOQUEIO DE ÁUDIO NO NAVEGADOR
+  // ========================================================================
+  function showUnmuteOverlay() {
+    if (dom.btnUnmuteAudio && !state.isHost) {
+      dom.btnUnmuteAudio.style.display = 'inline-flex';
+    }
+  }
+
+  function hideUnmuteOverlay() {
+    if (dom.btnUnmuteAudio) {
+      dom.btnUnmuteAudio.style.display = 'none';
+    }
+  }
+
+  function unlockAudio() {
+    if (dom.remoteAudio && dom.remoteAudio.srcObject) {
+      dom.remoteAudio.muted = false;
+      dom.remoteAudio.volume = 1.0;
+      dom.remoteAudio.play()
+        .then(() => {
+          hideUnmuteOverlay();
+        })
+        .catch(err => {
+          console.warn('[Audio] Falha ao desbloquear áudio:', err);
+        });
     }
   }
 
@@ -1670,6 +1748,16 @@
     });
 
     dom.btnExitConfirm.addEventListener('click', leaveRoom);
+
+    // Desbloqueio Global de Áudio (Autoplay Policy do Navegador)
+    document.addEventListener('click', unlockAudio, { passive: true });
+    document.addEventListener('keydown', unlockAudio, { passive: true });
+    if (dom.btnUnmuteAudio) {
+      dom.btnUnmuteAudio.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unlockAudio();
+      });
+    }
 
     // Detecção de parâmetro de URL (?room=PMESP-XXX-X)
     const urlParams = new URLSearchParams(window.location.search);

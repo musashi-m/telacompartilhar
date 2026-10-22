@@ -1290,3 +1290,37 @@ footer {
   transform: translateY(0);
 }
 
+/* Botão Flutuante de Desmutar Áudio */
+.btn-unmute-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: var(--radius-full);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  animation: pulse-attention 1.8s infinite;
+  transition: all 0.2s ease;
+}
+
+.btn-unmute-overlay:hover {
+  background: linear-gradient(135deg, #b71c1c 0%, #880e4f 100%);
+  transform: scale(1.04);
+}
+
+@keyframes pulse-attention {
+  0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.7); }
+  70% { box-shadow: 0 0 0 12px rgba(211, 47, 47, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
+}
+
+
