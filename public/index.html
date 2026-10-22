@@ -90,6 +90,22 @@
                 <label for="create-username">SEU NOME / POSTO / IDENTIFICAÇÃO</label>
                 <input type="text" id="create-username" class="form-control" placeholder="Ex: Ten PM Cavalcante" value="Ten PM Cavalcante">
               </div>
+
+              <!-- Proteção por Senha (Opcional - 4 dígitos) -->
+              <div class="form-group" style="margin-top: 10px; padding: 10px 12px; background: var(--surface-container-low); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 0;">
+                  <span style="display: flex; align-items: center; gap: 6px; color: #ffffff; font-size: 11px;">
+                    <span class="material-symbols-outlined" style="font-size: 16px; color: var(--secondary);">lock</span>
+                    <span>SALA COM SENHA (PIN 4 DÍGITOS)</span>
+                  </span>
+                  <input type="checkbox" id="create-require-password" style="accent-color: var(--primary-container); cursor: pointer; width: 16px; height: 16px;">
+                </label>
+                <div id="create-password-group" style="display: none; margin-top: 10px;">
+                  <label for="create-password" style="font-size: 10px; color: var(--tertiary);">DEFINA A SENHA (4 DÍGITOS NUMÉRICOS)</label>
+                  <input type="password" id="create-password" class="form-control mono-input" placeholder="Ex: 1234" maxlength="4" pattern="[0-9]*" inputmode="numeric" style="letter-spacing: 6px; font-size: 16px; width: 100%; text-align: center;">
+                  <span style="font-size: 11px; color: var(--tertiary); margin-top: 4px; display: block;">Se ativado, apenas participantes com este PIN conseguirão acessar.</span>
+                </div>
+              </div>
             </div>
 
             <div style="margin-top: 16px;">
@@ -109,9 +125,9 @@
                   <span class="material-symbols-outlined">login</span>
                 </div>
               </div>
-              <p class="card-desc">Acesse uma transmissão em andamento utilizando o link compartilhado pelo instrutor.</p>
+              <p class="card-desc" id="join-card-desc">Acesse uma transmissão em andamento utilizando o link compartilhado pelo instrutor.</p>
               
-              <div class="form-group">
+              <div class="form-group" id="join-code-group">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label for="join-code">CÓDIGO DA SALA</label>
                   <span id="join-code-badge" class="badge-tag badge-idle" style="display: none; font-size: 10px;">Preenchido via Link</span>
@@ -123,6 +139,15 @@
                 <label for="join-username">SEU NOME / POSTO / IDENTIFICAÇÃO</label>
                 <input type="text" id="join-username" class="form-control" placeholder="Ex: Sgt PM Silva" value="Sgt PM Silva" autocomplete="name">
               </div>
+
+              <!-- Campo de Senha de Entrada (se exigida pela sala) -->
+              <div class="form-group" id="join-password-group" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label for="join-password" style="color: #ffb3ac;">SENHA DA SALA (PIN 4 DÍGITOS)</label>
+                  <span class="badge-tag badge-live" style="font-size: 10px;">Protegida</span>
+                </div>
+                <input type="password" id="join-password" class="form-control mono-input" placeholder="Digite os 4 números" maxlength="4" pattern="[0-9]*" inputmode="numeric" style="letter-spacing: 6px; font-size: 16px; text-align: center;">
+              </div>
             </div>
 
             <div style="margin-top: 16px;">
@@ -130,6 +155,13 @@
                 <span class="material-symbols-outlined">arrow_forward</span>
                 <span>Entrar na Sala</span>
               </button>
+            </div>
+
+            <!-- Link para voltar ao lobby completo quando entrar via convite -->
+            <div id="link-show-full-lobby" style="display: none; text-align: center; margin-top: 14px;">
+              <a href="javascript:void(0)" id="btn-show-create-room" style="font-size: 12px; color: var(--tertiary); text-decoration: underline;">
+                Deseja criar uma nova sala em vez de entrar? Clique aqui
+              </a>
             </div>
           </div>
 
@@ -544,18 +576,18 @@
   </div>
 
   <!-- ========================================================================
-       MODAL DE CONFIRMAÇÃO DE SAÍDA
+       MODAL DE CONFIRMAÇÃO DE SAÍDA / ENCERRAMENTO
        ======================================================================== -->
   <div class="modal-backdrop" id="modal-exit">
-    <div class="modal-box" style="max-width: 440px;">
+    <div class="modal-box" style="max-width: 460px;">
       
       <div class="modal-header">
-        <span class="material-symbols-outlined" style="color: var(--primary-container);">logout</span>
-        <h3>Sair da Sala de Transmissão?</h3>
+        <span class="material-symbols-outlined" style="color: var(--primary-container);" id="modal-exit-icon">logout</span>
+        <h3 id="modal-exit-title">Sair da Sala de Transmissão?</h3>
       </div>
 
       <div class="modal-body">
-        <p>Você será desconectado da sessão. Se você estiver transmitindo a tela, o streaming será encerrado para os participantes.</p>
+        <p id="modal-exit-desc">Você será desconectado da sessão de instrução.</p>
       </div>
 
       <div class="modal-actions">

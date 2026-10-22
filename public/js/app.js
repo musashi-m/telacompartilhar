@@ -81,19 +81,29 @@
     headerUserAvatar: document.getElementById('current-user-avatar'),
 
     // Lobby
+    cardCreateRoom: document.getElementById('card-create-room'),
     inputCreateTopic: document.getElementById('create-topic'),
     inputCreateUsername: document.getElementById('create-username'),
+    createRequirePassword: document.getElementById('create-require-password'),
+    createPasswordGroup: document.getElementById('create-password-group'),
+    createPassword: document.getElementById('create-password'),
     btnCreateRoom: document.getElementById('btn-create-room'),
+    cardJoinRoom: document.getElementById('card-join-room'),
+    joinCodeGroup: document.getElementById('join-code-group'),
     inputJoinCode: document.getElementById('join-code'),
     inputJoinUsername: document.getElementById('join-username'),
+    joinPasswordGroup: document.getElementById('join-password-group'),
+    joinPassword: document.getElementById('join-password'),
     btnJoinRoom: document.getElementById('btn-join-room'),
+    linkShowFullLobby: document.getElementById('link-show-full-lobby'),
+    btnShowCreateRoom: document.getElementById('btn-show-create-room'),
+    roomsSection: document.querySelector('.rooms-section'),
     roomsListContainer: document.getElementById('rooms-list-container'),
     activeRoomsCount: document.getElementById('active-rooms-count'),
     btnRefreshRooms: document.getElementById('btn-refresh-rooms'),
     inviteBanner: document.getElementById('invite-banner'),
     inviteRoomCode: document.getElementById('invite-room-code'),
     joinCodeBadge: document.getElementById('join-code-badge'),
-    cardJoinRoom: document.getElementById('card-join-room'),
 
     // Sala Sub-header
     sessionRoomTopic: document.getElementById('session-room-topic'),
@@ -139,8 +149,9 @@
     btnCtrlUsers: document.getElementById('btn-ctrl-users'),
     labelCtrlUsers: document.getElementById('label-ctrl-users'),
     btnCtrlChat: document.getElementById('btn-ctrl-chat'),
-    btnCtrlStats: document.getElementById('btn-ctrl-stats'),
     btnCtrlExit: document.getElementById('btn-ctrl-exit'),
+    iconCtrlExit: document.getElementById('icon-ctrl-exit'),
+    labelCtrlExit: document.getElementById('label-ctrl-exit'),
 
     // Painel Lateral
     sidebarPanel: document.getElementById('sidebar-panel'),
@@ -177,6 +188,9 @@
     btnModalApply: document.getElementById('btn-modal-apply'),
 
     modalExit: document.getElementById('modal-exit'),
+    modalExitIcon: document.getElementById('modal-exit-icon'),
+    modalExitTitle: document.getElementById('modal-exit-title'),
+    modalExitDesc: document.getElementById('modal-exit-desc'),
     btnExitCancel: document.getElementById('btn-exit-cancel'),
     btnExitConfirm: document.getElementById('btn-exit-confirm'),
 
@@ -396,6 +410,15 @@
         appendChatMessage(message);
         break;
       }
+
+      // Notificação de encerramento definitivo da aula pelo instrutor
+      case 'roomClosed': {
+        const reason = notification.reason || 'A aula de instrução foi encerrada em definitivo pelo instrutor.';
+        showToast(reason, 'warn', 8000);
+        alert(reason);
+        exitRoomToLobby();
+        break;
+      }
     }
   }
 
@@ -567,6 +590,14 @@
         };
 
         dom.remoteVideo.onloadedmetadata = () => {
+          const w = dom.remoteVideo.videoWidth;
+          const h = dom.remoteVideo.videoHeight;
+          if (w && h) {
+            dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
+          }
+          safePlay();
+        };
+
         // Se o stream de vídeo também trouxer trilha de áudio embutida
         if (event.streams && event.streams[0]) {
           const audioTracks = event.streams[0].getAudioTracks();
@@ -1234,6 +1265,16 @@
       dom.placeholderIconSymbol.textContent = 'screen_share';
 
       dom.headerUserRole.textContent = 'Instrutor Titular (Criador)';
+
+      // Configuração visual do botão de encerrar para o Instrutor
+      if (dom.iconCtrlExit) dom.iconCtrlExit.textContent = 'power_settings_new';
+      if (dom.labelCtrlExit) dom.labelCtrlExit.textContent = 'Encerrar Aula';
+      if (dom.btnCtrlExit) {
+        dom.btnCtrlExit.title = 'Encerrar a Aula e Fechar a Sala para Todos';
+        dom.btnCtrlExit.style.backgroundColor = 'rgba(211, 47, 47, 0.2)';
+        dom.btnCtrlExit.style.borderColor = 'rgba(211, 47, 47, 0.4)';
+        dom.btnCtrlExit.style.color = '#ff8a80';
+      }
     } else {
       // Espectador: Apenas assistir e interagir na aba de dúvidas
       dom.hostMediaControls.style.display = 'none';
@@ -1245,6 +1286,16 @@
       dom.placeholderIconSymbol.textContent = 'tv';
 
       dom.headerUserRole.textContent = 'Espectador / Participante';
+
+      // Configuração visual do botão de sair para Alunos/Espectadores
+      if (dom.iconCtrlExit) dom.iconCtrlExit.textContent = 'logout';
+      if (dom.labelCtrlExit) dom.labelCtrlExit.textContent = 'Sair';
+      if (dom.btnCtrlExit) {
+        dom.btnCtrlExit.title = 'Sair da Sala';
+        dom.btnCtrlExit.style.backgroundColor = '';
+        dom.btnCtrlExit.style.borderColor = '';
+        dom.btnCtrlExit.style.color = '';
+      }
     }
   }
 
@@ -1319,6 +1370,16 @@
     const topic = dom.inputCreateTopic.value.trim() || 'Instrução Operacional';
     const username = dom.inputCreateUsername.value.trim() || 'Operador Local';
 
+    let pin = null;
+    if (dom.createRequirePassword && dom.createRequirePassword.checked) {
+      pin = (dom.createPassword.value || '').trim();
+      if (!/^\d{4}$/.test(pin)) {
+        showToast('A senha da sala deve conter exatamente 4 dígitos numéricos.', 'warn');
+        dom.createPassword.focus();
+        return;
+      }
+    }
+
     try {
       localStorage.setItem('pmesp_user_name', username);
     } catch (e) {}
@@ -1333,12 +1394,13 @@
     dom.headerUserDisplay.textContent = username;
     dom.headerUserAvatar.textContent = username.substring(0, 2).toUpperCase();
 
-    await joinRoom(roomId, topic, true);
+    await joinRoom(roomId, topic, true, pin);
   }
 
   async function joinExistingRoom() {
     const code = dom.inputJoinCode.value.trim().toUpperCase();
     const username = dom.inputJoinUsername.value.trim() || 'Operador Local';
+    const pin = (dom.joinPassword && dom.joinPassword.value) ? dom.joinPassword.value.trim() : null;
 
     if (!code) {
       showToast('Por favor, informe o código da sala.', 'warn');
@@ -1354,7 +1416,7 @@
     dom.headerUserDisplay.textContent = username;
     dom.headerUserAvatar.textContent = username.substring(0, 2).toUpperCase();
 
-    await joinRoom(code, 'Instrução em Andamento', false);
+    await joinRoom(code, 'Instrução em Andamento', false, pin);
   }
 
   // ========================================================================
@@ -1404,7 +1466,7 @@
     document.body.removeChild(ta);
   }
 
-  async function joinRoom(roomId, topic, isCreating = false) {
+  async function joinRoom(roomId, topic, isCreating = false, password = null) {
     try {
       showToast(`Conectando à sala ${roomId}...`, 'info');
 
@@ -1413,7 +1475,8 @@
         peerId: state.peerId,
         displayName: state.displayName,
         isCreating: isCreating,
-        topic
+        topic,
+        password
       });
 
       state.currentRoomId = response.roomId;
@@ -1461,48 +1524,90 @@
 
     } catch (err) {
       console.error('[Join] Erro ao ingressar na sala:', err);
-      showToast(`Falha ao entrar na sala: ${err.message}`, 'error');
+      if (err.message === 'SENHA_OBRIGATORIA') {
+        if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'block';
+        if (dom.joinPassword) {
+          dom.joinPassword.focus();
+        }
+        showToast('Esta sala é protegida por senha. Por favor, digite a senha de 4 dígitos para acessar.', 'warn', 6000);
+      } else if (err.message === 'SENHA_INCORRETA') {
+        if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'block';
+        if (dom.joinPassword) {
+          dom.joinPassword.value = '';
+          dom.joinPassword.focus();
+        }
+        showToast('Senha incorreta! Digite o PIN numérico de 4 dígitos configurado pelo instrutor.', 'error', 6000);
+      } else {
+        showToast(`Falha ao entrar na sala: ${err.message}`, 'error');
+      }
     }
   }
 
+  /**
+   * Limpa o estado da sala ativa e retorna à visualização do lobby
+   */
+  async function exitRoomToLobby() {
+    if (state.isBroadcasting) {
+      await stopScreenSharing();
+    }
+    if (state.webcamStream) {
+      state.webcamStream.getTracks().forEach(t => t.stop());
+      state.webcamStream = null;
+    }
+    if (state.micStream) {
+      state.micStream.getTracks().forEach(t => t.stop());
+      state.micStream = null;
+    }
+
+    closeAllPeerConnections();
+
+    // Limpa estado local
+    state.currentRoomId = null;
+    state.peers.clear();
+    state.isBroadcasting = false;
+    state.isHost = false;
+
+    stopSessionTimer();
+    stopTelemetryStats();
+
+    // Limpa URL
+    window.history.pushState({}, '', location.pathname);
+
+    // Retorna ao Lobby
+    dom.viewRoom.classList.remove('active');
+    dom.viewLobby.classList.add('active');
+    dom.modalExit.classList.remove('active');
+
+    // Restaura o lobby completo caso estivesse no modo isolado de convite
+    showFullLobby();
+    fetchRoomsList();
+  }
+
+  /**
+   * Sair da sala como participante/espectador
+   */
   async function leaveRoom() {
     try {
-      if (state.isBroadcasting) {
-        await stopScreenSharing();
-      }
-      if (state.webcamStream) {
-        state.webcamStream.getTracks().forEach(t => t.stop());
-        state.webcamStream = null;
-      }
-      if (state.micStream) {
-        state.micStream.getTracks().forEach(t => t.stop());
-        state.micStream = null;
-      }
-
-      closeAllPeerConnections();
-
       await sendRequest('leave');
-
-      // Limpa estado local
-      state.currentRoomId = null;
-      state.peers.clear();
-      state.isBroadcasting = false;
-
-      stopSessionTimer();
-      stopTelemetryStats();
-
-      // Limpa URL
-      window.history.pushState({}, '', location.pathname);
-
-      // Retorna ao Lobby
-      dom.viewRoom.classList.remove('active');
-      dom.viewLobby.classList.add('active');
-      dom.modalExit.classList.remove('active');
-
-      fetchRoomsList();
-      showToast('Você saiu da sala.', 'info');
     } catch (err) {
-      console.error('[Leave] Erro ao sair:', err);
+      console.warn('[Leave] Erro ao notificar servidor:', err);
+    }
+    await exitRoomToLobby();
+    showToast('Você saiu da sala.', 'info');
+  }
+
+  /**
+   * Encerrar a aula em definitivo (exclusivo para o instrutor)
+   */
+  async function endRoomDefinitively() {
+    try {
+      showToast('Encerrando a aula para todos os participantes...', 'info');
+      await sendRequest('endRoom');
+      await exitRoomToLobby();
+      showToast('Aula encerrada com sucesso e sala fechada em definitivo.', 'ok', 6000);
+    } catch (err) {
+      console.error('[EndRoom] Erro ao encerrar aula:', err);
+      showToast(`Falha ao encerrar a aula: ${err.message}`, 'error');
       dom.modalExit.classList.remove('active');
     }
   }
@@ -1533,11 +1638,12 @@
         row.className = 'room-row';
         row.innerHTML = `
           <div class="room-info">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span class="room-title">${escapeHtml(r.topic)}</span>
               <span class="badge-tag ${r.hasActiveStream ? 'badge-live' : 'badge-idle'}">
                 ${r.hasActiveStream ? '● AO VIVO' : 'DISPONÍVEL'}
               </span>
+              ${r.hasPassword ? '<span class="badge-tag" style="background: rgba(255,180,170,0.15); color: #ffb3ac; border: 1px solid rgba(255,180,170,0.3);"><span class="material-symbols-outlined" style="font-size: 13px; vertical-align: middle;">lock</span> Com Senha</span>' : ''}
             </div>
             <div class="room-meta">
               <span class="mono" style="font-weight: 600; color: #fff;">${escapeHtml(r.id)}</span>
@@ -1556,7 +1662,18 @@
         row.querySelector('button').addEventListener('click', () => {
           const u = dom.inputJoinUsername.value.trim() || 'Operador Local';
           state.displayName = u;
-          joinRoom(r.id, r.topic);
+          if (r.hasPassword) {
+            dom.inputJoinCode.value = r.id;
+            if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'block';
+            if (dom.joinPassword) {
+              dom.joinPassword.value = '';
+              dom.joinPassword.focus();
+            }
+            if (dom.cardJoinRoom) dom.cardJoinRoom.scrollIntoView({ behavior: 'smooth' });
+            showToast(`A sala ${r.id} é protegida por senha. Digite o PIN de 4 dígitos e clique em Entrar.`, 'info');
+          } else {
+            joinRoom(r.id, r.topic, false, null);
+          }
         });
 
         dom.roomsListContainer.appendChild(row);
@@ -1680,9 +1797,44 @@
       dom.sidebarPanel.classList.toggle('collapsed');
     });
 
-    dom.btnCtrlExit.addEventListener('click', () => {
-      dom.modalExit.classList.add('active');
-    });
+    // Senha de 4 dígitos - Toggle no card de criação
+    if (dom.createRequirePassword) {
+      dom.createRequirePassword.addEventListener('change', () => {
+        if (dom.createRequirePassword.checked) {
+          if (dom.createPasswordGroup) dom.createPasswordGroup.style.display = 'block';
+          if (dom.createPassword) dom.createPassword.focus();
+        } else {
+          if (dom.createPasswordGroup) dom.createPasswordGroup.style.display = 'none';
+          if (dom.createPassword) dom.createPassword.value = '';
+        }
+      });
+    }
+
+    if (dom.createPassword) {
+      dom.createPassword.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          createAndJoinRoom();
+        }
+      });
+    }
+
+    if (dom.joinPassword) {
+      dom.joinPassword.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          joinExistingRoom();
+        }
+      });
+    }
+
+    // Botão para ver lobby completo caso tenha entrado por link
+    if (dom.btnShowCreateRoom) {
+      dom.btnShowCreateRoom.addEventListener('click', (e) => {
+        e.preventDefault();
+        showFullLobby();
+      });
+    }
 
     // Chat
     dom.btnSendChat.addEventListener('click', sendChatMessage);
@@ -1742,12 +1894,49 @@
       }
     });
 
-    // Modal de Saída
+    // Modal de Saída / Encerramento
+    dom.btnCtrlExit.addEventListener('click', () => {
+      if (state.isHost) {
+        if (dom.modalExitIcon) {
+          dom.modalExitIcon.textContent = 'power_settings_new';
+          dom.modalExitIcon.style.color = 'var(--status-error)';
+        }
+        if (dom.modalExitTitle) dom.modalExitTitle.textContent = 'Encerrar a Aula Definitivamente?';
+        if (dom.modalExitDesc) {
+          dom.modalExitDesc.innerHTML = 'Atenção Instrutor: Ao encerrar a aula, a transmissão será finalizada, <strong>todos os participantes serão desconectados</strong> e a sala será fechada em definitivo no servidor.';
+        }
+        if (dom.btnExitConfirm) {
+          dom.btnExitConfirm.innerHTML = '<span class="material-symbols-outlined">power_settings_new</span><span>Encerrar Aula para Todos</span>';
+          dom.btnExitConfirm.style.backgroundColor = 'var(--status-error)';
+        }
+      } else {
+        if (dom.modalExitIcon) {
+          dom.modalExitIcon.textContent = 'logout';
+          dom.modalExitIcon.style.color = 'var(--primary-container)';
+        }
+        if (dom.modalExitTitle) dom.modalExitTitle.textContent = 'Sair da Sala de Transmissão?';
+        if (dom.modalExitDesc) {
+          dom.modalExitDesc.textContent = 'Você será desconectado da sessão de instrução. Poderá retornar a qualquer momento se a aula ainda estiver aberta.';
+        }
+        if (dom.btnExitConfirm) {
+          dom.btnExitConfirm.innerHTML = '<span class="material-symbols-outlined">logout</span><span>Confirmar Saída</span>';
+          dom.btnExitConfirm.style.backgroundColor = 'var(--primary-container)';
+        }
+      }
+      dom.modalExit.classList.add('active');
+    });
+
     dom.btnExitCancel.addEventListener('click', () => {
       dom.modalExit.classList.remove('active');
     });
 
-    dom.btnExitConfirm.addEventListener('click', leaveRoom);
+    dom.btnExitConfirm.addEventListener('click', () => {
+      if (state.isHost) {
+        endRoomDefinitively();
+      } else {
+        leaveRoom();
+      }
+    });
 
     // Desbloqueio Global de Áudio (Autoplay Policy do Navegador)
     document.addEventListener('click', unlockAudio, { passive: true });
@@ -1763,40 +1952,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     if (roomParam) {
-      const cleanRoom = roomParam.trim().toUpperCase();
-      dom.inputJoinCode.value = cleanRoom;
-      dom.inputJoinCode.readOnly = true;
-      dom.inputJoinCode.style.opacity = '0.9';
-      dom.inputJoinCode.style.backgroundColor = 'var(--surface-container-high)';
-
-      if (dom.inviteBanner) dom.inviteBanner.style.display = 'flex';
-      if (dom.inviteRoomCode) dom.inviteRoomCode.textContent = cleanRoom;
-      if (dom.joinCodeBadge) dom.joinCodeBadge.style.display = 'inline-block';
-      if (dom.cardJoinRoom) dom.cardJoinRoom.classList.add('card-highlight');
-
-      // Tenta recuperar o último nome utilizado pelo aluno
-      const savedName = localStorage.getItem('pmesp_user_name');
-      if (savedName) {
-        dom.inputJoinUsername.value = savedName;
-      } else {
-        dom.inputJoinUsername.value = '';
-      }
-
-      // Foca automaticamente no campo de nome para o usuário só digitar
-      setTimeout(() => {
-        dom.inputJoinUsername.focus();
-        dom.inputJoinUsername.select();
-      }, 250);
-
-      // Transforma o botão para destaque primário com texto claro
-      dom.btnJoinRoom.classList.remove('btn-secondary');
-      dom.btnJoinRoom.classList.add('btn-primary');
-      dom.btnJoinRoom.innerHTML = `
-        <span class="material-symbols-outlined">login</span>
-        <span>Entrar na Instrução Agora</span>
-      `;
-
-      showToast(`Convite para a sala ${cleanRoom} identificado. Digite seu nome e clique em Entrar.`, 'info', 5000);
+      isolateJoinView(roomParam);
     } else {
       // Se não veio por convite, carrega o nome salvo se existir
       const savedName = localStorage.getItem('pmesp_user_name');
@@ -1805,6 +1961,116 @@
         dom.inputJoinUsername.value = savedName;
       }
     }
+  }
+
+  // ========================================================================
+  // ISOLAMENTO DE TELA AO ACESSAR VIA LINK DE CONVITE
+  // ========================================================================
+  function isolateJoinView(roomId) {
+    const cleanRoom = String(roomId || '').trim().toUpperCase();
+
+    // 1. Oculta o card de criar sala e a lista de salas públicas
+    if (dom.cardCreateRoom) dom.cardCreateRoom.style.display = 'none';
+    if (dom.roomsSection) dom.roomsSection.style.display = 'none';
+
+    // 2. Centraliza o card de entrar na sala
+    if (dom.cardJoinRoom) {
+      dom.cardJoinRoom.classList.add('card-highlight');
+      dom.cardJoinRoom.style.maxWidth = '520px';
+      dom.cardJoinRoom.style.margin = '0 auto';
+      dom.cardJoinRoom.style.gridColumn = '1 / -1';
+    }
+
+    // 3. Preenche e bloqueia o código da sala
+    dom.inputJoinCode.value = cleanRoom;
+    dom.inputJoinCode.readOnly = true;
+    dom.inputJoinCode.style.opacity = '0.9';
+    dom.inputJoinCode.style.backgroundColor = 'var(--surface-container-high)';
+
+    if (dom.joinCodeBadge) dom.joinCodeBadge.style.display = 'inline-block';
+    if (dom.inviteBanner) dom.inviteBanner.style.display = 'flex';
+    if (dom.inviteRoomCode) dom.inviteRoomCode.textContent = cleanRoom;
+    if (dom.linkShowFullLobby) dom.linkShowFullLobby.style.display = 'block';
+
+    const desc = document.getElementById('join-card-desc');
+    if (desc) {
+      desc.innerHTML = `Você foi convidado para a instrução na sala <strong style="color: #fff;">${escapeHtml(cleanRoom)}</strong>. Preencha seus dados para acessar.`;
+    }
+
+    // 4. Botão em destaque primário
+    dom.btnJoinRoom.classList.remove('btn-secondary');
+    dom.btnJoinRoom.classList.add('btn-primary');
+    dom.btnJoinRoom.innerHTML = `
+      <span class="material-symbols-outlined">login</span>
+      <span>Entrar na Instrução Agora</span>
+    `;
+
+    // 5. Verifica se a sala já exige senha de 4 dígitos
+    fetch(`/api/room/${encodeURIComponent(cleanRoom)}`)
+      .then(res => res.json())
+      .then(info => {
+        if (info && info.hasPassword) {
+          if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'block';
+        }
+      })
+      .catch(e => console.warn('[RoomInfo] Erro ao verificar senha da sala:', e));
+
+    // 6. Tenta preencher identificação salva
+    const savedName = localStorage.getItem('pmesp_user_name');
+    if (savedName) {
+      dom.inputJoinUsername.value = savedName;
+      setTimeout(() => {
+        if (dom.joinPasswordGroup && dom.joinPasswordGroup.style.display !== 'none') {
+          dom.joinPassword.focus();
+        } else {
+          dom.inputJoinUsername.focus();
+          dom.inputJoinUsername.select();
+        }
+      }, 300);
+    } else {
+      setTimeout(() => {
+        dom.inputJoinUsername.focus();
+      }, 300);
+    }
+
+    showToast(`Convite para a sala ${cleanRoom} identificado. Informe seus dados e clique em Entrar.`, 'info', 5000);
+  }
+
+  function showFullLobby() {
+    if (dom.cardCreateRoom) dom.cardCreateRoom.style.display = '';
+    if (dom.roomsSection) dom.roomsSection.style.display = '';
+    if (dom.cardJoinRoom) {
+      dom.cardJoinRoom.classList.remove('card-highlight');
+      dom.cardJoinRoom.style.maxWidth = '';
+      dom.cardJoinRoom.style.margin = '';
+      dom.cardJoinRoom.style.gridColumn = '';
+    }
+    if (dom.inputJoinCode) {
+      dom.inputJoinCode.readOnly = false;
+      dom.inputJoinCode.value = '';
+      dom.inputJoinCode.style.opacity = '';
+      dom.inputJoinCode.style.backgroundColor = '';
+    }
+    if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'none';
+    if (dom.joinPassword) dom.joinPassword.value = '';
+    if (dom.joinCodeBadge) dom.joinCodeBadge.style.display = 'none';
+    if (dom.inviteBanner) dom.inviteBanner.style.display = 'none';
+    if (dom.linkShowFullLobby) dom.linkShowFullLobby.style.display = 'none';
+
+    const desc = document.getElementById('join-card-desc');
+    if (desc) {
+      desc.textContent = 'Acesse uma transmissão em andamento utilizando o link compartilhado pelo instrutor.';
+    }
+
+    dom.btnJoinRoom.classList.remove('btn-primary');
+    dom.btnJoinRoom.classList.add('btn-secondary');
+    dom.btnJoinRoom.innerHTML = `
+      <span class="material-symbols-outlined">login</span>
+      <span>Entrar na Sala</span>
+    `;
+
+    window.history.pushState({}, '', location.pathname);
+    fetchRoomsList();
   }
 
   // ========================================================================

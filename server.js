@@ -20,7 +20,8 @@ app.get('/api/status', (req, res) => {
     id: r.id,
     topic: r.topic,
     peersCount: r.peers.size,
-    hasActiveStream: r.hasActiveStream
+    hasActiveStream: r.hasActiveStream,
+    hasPassword: !!r.password
   }));
 
   res.json({
@@ -28,6 +29,23 @@ app.get('/api/status', (req, res) => {
     transport: 'WebRTC P2P',
     activeRooms: roomsSummary.length,
     rooms: roomsSummary
+  });
+});
+
+// Informações públicas da sala para entrada
+app.get('/api/room/:id', (req, res) => {
+  const cleanId = String(req.params.id || '').trim().toUpperCase();
+  const r = rooms.get(cleanId);
+  if (!r) {
+    return res.status(404).json({ exists: false });
+  }
+  res.json({
+    exists: true,
+    id: r.id,
+    topic: r.topic,
+    hasPassword: !!r.password,
+    hasActiveStream: r.hasActiveStream,
+    peersCount: r.peers.size
   });
 });
 
@@ -91,15 +109,36 @@ wss.on('connection', (ws) => {
             topic: r.topic,
             createdAt: r.createdAt,
             peersCount: r.peers.size,
-            hasActiveStream: r.hasActiveStream
+            hasActiveStream: r.hasActiveStream,
+            hasPassword: !!r.password
           }));
           sendResponse(id, { rooms: list });
           break;
         }
 
+        // Consulta status da sala (se existe e se tem senha)
+        case 'getRoomInfo': {
+          const { roomId } = data;
+          const cleanId = String(roomId || '').trim().toUpperCase();
+          const r = rooms.get(cleanId);
+          if (!r) {
+            sendResponse(id, { exists: false });
+          } else {
+            sendResponse(id, {
+              exists: true,
+              id: r.id,
+              topic: r.topic,
+              hasPassword: !!r.password,
+              hasActiveStream: r.hasActiveStream,
+              peersCount: r.peers.size
+            });
+          }
+          break;
+        }
+
         // Entrar ou criar sala
         case 'join': {
-          const { roomId, peerId, displayName, isCreating, topic } = data;
+          const { roomId, peerId, displayName, isCreating, topic, password } = data;
           currentRoomId = roomId;
           currentPeerId = peerId;
 
@@ -107,18 +146,31 @@ wss.on('connection', (ws) => {
           let room;
 
           if (isRoomNew) {
+            const cleanPin = (password && String(password).trim().length === 4) ? String(password).trim() : null;
             room = {
               id: roomId,
               topic: topic || 'Instrução Operacional',
               createdAt: Date.now(),
               creatorPeerId: peerId,
+              password: cleanPin,
               peers: new Map(),
               hasActiveStream: false
             };
             rooms.set(roomId, room);
-            console.log(`[Sala ${roomId}] Nova sala criada por "${displayName}" (${peerId})`);
+            console.log(`[Sala ${roomId}] Nova sala criada por "${displayName}" (${peerId})${room.password ? ' [PROTEGIDA POR SENHA]' : ''}`);
           } else {
             room = rooms.get(roomId);
+
+            // Validação de Senha (se a sala for protegida e quem está entrando não for o criador original)
+            if (room.password && room.creatorPeerId !== peerId) {
+              const providedPin = password ? String(password).trim() : '';
+              if (!providedPin) {
+                return sendResponse(id, null, 'SENHA_OBRIGATORIA');
+              }
+              if (providedPin !== room.password) {
+                return sendResponse(id, null, 'SENHA_INCORRETA');
+              }
+            }
           }
 
           const isHost = (room.creatorPeerId === peerId) || (isCreating && isRoomNew);
@@ -174,6 +226,7 @@ wss.on('connection', (ws) => {
             creatorPeerId: room.creatorPeerId,
             peers: existingPeers,
             hasActiveStream: room.hasActiveStream,
+            hasPassword: !!room.password,
             iceServers
           });
           break;
@@ -301,10 +354,37 @@ wss.on('connection', (ws) => {
           break;
         }
 
-        // Sair da sala
+        // Sair da sala individualmente
         case 'leave': {
           cleanupPeer();
           sendResponse(id, { left: true });
+          break;
+        }
+
+        // Encerrar aula definitivamente (apenas o instrutor)
+        case 'endRoom': {
+          const room = rooms.get(currentRoomId);
+          if (!room) throw new Error('Sala não encontrada.');
+
+          if (room.creatorPeerId !== currentPeerId) {
+            throw new Error('Apenas o instrutor possui autorização para encerrar a aula.');
+          }
+
+          console.log(`[Sala ${currentRoomId}] Instrução encerrada em definitivo pelo instrutor (${currentPeerId}). Fechando para todos.`);
+
+          // Notifica todos os participantes que a aula acabou e a sala foi fechada
+          broadcastToRoom(room, {
+            type: 'notification',
+            event: 'roomClosed',
+            reason: 'A aula de instrução foi encerrada em definitivo pelo instrutor.'
+          });
+
+          // Deleta a sala do servidor imediatamente
+          const closingRoomId = currentRoomId;
+          rooms.delete(closingRoomId);
+          currentRoomId = null;
+
+          sendResponse(id, { ended: true, roomId: closingRoomId });
           break;
         }
 
