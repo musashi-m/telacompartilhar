@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: pmesp-telacompartilhar
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 3000
