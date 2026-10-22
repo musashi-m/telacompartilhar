@@ -1993,27 +1993,57 @@
         unlockAudio();
       });
     }
+  }
 
-    // Detecção de parâmetro de URL (?room=PMESP-XXX-X)
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomParam = urlParams.get('room');
-    if (roomParam) {
-      isolateJoinView(roomParam);
-    } else {
-      // Se não veio por convite, carrega o nome salvo se existir
-      const savedName = localStorage.getItem('pmesp_user_name');
-      if (savedName) {
-        dom.inputCreateUsername.value = savedName;
-        dom.inputJoinUsername.value = savedName;
+  // ========================================================================
+  // EXTRAÇÃO DE CÓDIGO DA SALA DA URL (QUERY PARAM, HASH OU PATH)
+  // ========================================================================
+  function getRoomFromUrl() {
+    try {
+      const search = window.location.search;
+      if (search) {
+        const urlParams = new URLSearchParams(search);
+        const r = urlParams.get('room');
+        if (r && r.trim()) return r.trim().toUpperCase();
       }
+
+      const hash = window.location.hash;
+      if (hash) {
+        const cleanHash = hash.replace(/^[#/?]+/, '');
+        if (cleanHash.indexOf('room=') !== -1) {
+          const hp = new URLSearchParams(cleanHash.substring(cleanHash.indexOf('room=')));
+          const hr = hp.get('room');
+          if (hr && hr.trim()) return hr.trim().toUpperCase();
+        }
+        if (cleanHash.toUpperCase().startsWith('PMESP-')) {
+          return cleanHash.trim().toUpperCase();
+        }
+      }
+
+      const path = window.location.pathname;
+      if (path) {
+        const segments = path.split('/').filter(Boolean);
+        for (const seg of segments) {
+          if (seg.toUpperCase().startsWith('PMESP-')) {
+            return seg.trim().toUpperCase();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[URL] Erro ao extrair sala da URL:', e);
     }
+    return null;
   }
 
   // ========================================================================
   // ISOLAMENTO DE TELA AO ACESSAR VIA LINK DE CONVITE
   // ========================================================================
-  function isolateJoinView(roomId) {
+  async function isolateJoinView(roomId) {
     const cleanRoom = String(roomId || '').trim().toUpperCase();
+    if (!cleanRoom) return;
+
+    // Marca classe no <html> para ocultar imediatamente via CSS
+    document.documentElement.classList.add('is-invite-view');
 
     // 1. Oculta o card de criar sala e a lista de salas públicas
     if (dom.cardCreateRoom) dom.cardCreateRoom.style.display = 'none';
@@ -2028,10 +2058,12 @@
     }
 
     // 3. Preenche e bloqueia o código da sala
-    dom.inputJoinCode.value = cleanRoom;
-    dom.inputJoinCode.readOnly = true;
-    dom.inputJoinCode.style.opacity = '0.9';
-    dom.inputJoinCode.style.backgroundColor = 'var(--surface-container-high)';
+    if (dom.inputJoinCode) {
+      dom.inputJoinCode.value = cleanRoom;
+      dom.inputJoinCode.readOnly = true;
+      dom.inputJoinCode.style.opacity = '0.9';
+      dom.inputJoinCode.style.backgroundColor = 'var(--surface-container-high)';
+    }
 
     if (dom.joinCodeBadge) dom.joinCodeBadge.style.display = 'inline-block';
     if (dom.inviteBanner) dom.inviteBanner.style.display = 'flex';
@@ -2044,45 +2076,54 @@
     }
 
     // 4. Botão em destaque primário
-    dom.btnJoinRoom.classList.remove('btn-secondary');
-    dom.btnJoinRoom.classList.add('btn-primary');
-    dom.btnJoinRoom.innerHTML = `
-      <span class="material-symbols-outlined">login</span>
-      <span>Entrar na Instrução Agora</span>
-    `;
+    if (dom.btnJoinRoom) {
+      dom.btnJoinRoom.classList.remove('btn-secondary');
+      dom.btnJoinRoom.classList.add('btn-primary');
+      dom.btnJoinRoom.innerHTML = `
+        <span class="material-symbols-outlined">login</span>
+        <span>Entrar na Instrução Agora</span>
+      `;
+    }
 
-    // 5. Verifica se a sala já exige senha de 4 dígitos
-    fetch(`/api/room/${encodeURIComponent(cleanRoom)}`)
-      .then(res => res.json())
-      .then(info => {
+    // 5. Verifica se a sala existe e se requer senha de 4 dígitos
+    try {
+      const res = await fetch(`/api/room/${encodeURIComponent(cleanRoom)}`);
+      if (res.ok) {
+        const info = await res.json();
         if (info && info.hasPassword) {
           if (dom.joinPasswordGroup) dom.joinPasswordGroup.style.display = 'block';
+          if (dom.joinPassword) {
+            dom.joinPassword.placeholder = 'Digite a senha (4 números)';
+          }
         }
-      })
-      .catch(e => console.warn('[RoomInfo] Erro ao verificar senha da sala:', e));
+      }
+    } catch (e) {
+      console.warn('[RoomInfo] Erro ao verificar senha da sala:', e);
+    }
 
-    // 6. Tenta preencher identificação salva
+    // 6. Preenche identificação salva
     const savedName = localStorage.getItem('pmesp_user_name');
-    if (savedName) {
+    if (savedName && dom.inputJoinUsername) {
       dom.inputJoinUsername.value = savedName;
       setTimeout(() => {
-        if (dom.joinPasswordGroup && dom.joinPasswordGroup.style.display !== 'none') {
+        if (dom.joinPasswordGroup && dom.joinPasswordGroup.style.display !== 'none' && dom.joinPassword) {
           dom.joinPassword.focus();
-        } else {
+        } else if (dom.inputJoinUsername) {
           dom.inputJoinUsername.focus();
           dom.inputJoinUsername.select();
         }
       }, 300);
-    } else {
+    } else if (dom.inputJoinUsername) {
       setTimeout(() => {
         dom.inputJoinUsername.focus();
       }, 300);
     }
 
-    showToast(`Convite para a sala ${cleanRoom} identificado. Informe seus dados e clique em Entrar.`, 'info', 5000);
+    showToast(`Sala ${cleanRoom} identificada via link. Informe seus dados e clique em Entrar.`, 'info', 5000);
   }
 
   function showFullLobby() {
+    document.documentElement.classList.remove('is-invite-view');
     if (dom.cardCreateRoom) dom.cardCreateRoom.style.display = '';
     if (dom.roomsSection) dom.roomsSection.style.display = '';
     if (dom.cardJoinRoom) {
@@ -2108,23 +2149,46 @@
       desc.textContent = 'Acesse uma transmissão em andamento utilizando o link compartilhado pelo instrutor.';
     }
 
-    dom.btnJoinRoom.classList.remove('btn-primary');
-    dom.btnJoinRoom.classList.add('btn-secondary');
-    dom.btnJoinRoom.innerHTML = `
-      <span class="material-symbols-outlined">login</span>
-      <span>Entrar na Sala</span>
-    `;
+    if (dom.btnJoinRoom) {
+      dom.btnJoinRoom.classList.remove('btn-primary');
+      dom.btnJoinRoom.classList.add('btn-secondary');
+      dom.btnJoinRoom.innerHTML = `
+        <span class="material-symbols-outlined">login</span>
+        <span>Entrar na Sala</span>
+      `;
+    }
 
     window.history.pushState({}, '', location.pathname);
     fetchRoomsList();
   }
 
+  function checkUrlInvite() {
+    const cleanRoom = getRoomFromUrl();
+    if (cleanRoom) {
+      isolateJoinView(cleanRoom);
+    } else {
+      document.documentElement.classList.remove('is-invite-view');
+      const savedName = localStorage.getItem('pmesp_user_name');
+      if (savedName) {
+        if (dom.inputCreateUsername) dom.inputCreateUsername.value = savedName;
+        if (dom.inputJoinUsername) dom.inputJoinUsername.value = savedName;
+      }
+    }
+  }
+
   // ========================================================================
-  // INICIALIZAÇÃO
+  // INICIALIZAÇÃO ROBUSTA
   // ========================================================================
-  window.addEventListener('DOMContentLoaded', () => {
+  function initApp() {
     initEventBindings();
     connectWebSocket();
-  });
+    checkUrlInvite();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
 
 })();

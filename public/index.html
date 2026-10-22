@@ -12,7 +12,36 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
   
   <!-- Estilos Customizados Vanguarda Institucional PMESP -->
-  <link rel="stylesheet" href="css/style.css?v=20261022_3">
+  <link rel="stylesheet" href="css/style.css?v=20261022_4">
+
+  <!-- Detecção Imediata de Link de Convite (Evita flash do formulário de criação) -->
+  <script>
+    (function() {
+      try {
+        var p = new URLSearchParams(window.location.search);
+        var r = p.get('room') || (window.location.hash && window.location.hash.indexOf('room=') !== -1 ? new URLSearchParams(window.location.hash.substring(1)).get('room') : null);
+        if (r) {
+          document.documentElement.classList.add('is-invite-view');
+        }
+      } catch(e) {}
+    })();
+  </script>
+  <style>
+    html.is-invite-view #card-create-room,
+    html.is-invite-view .rooms-section,
+    html.is-invite-view #invite-banner {
+      display: none !important;
+    }
+    html.is-invite-view #card-join-room {
+      max-width: 520px !important;
+      margin: 0 auto !important;
+      grid-column: 1 / -1 !important;
+      box-shadow: 0 0 0 2px rgba(255, 180, 170, 0.4), var(--shadow-xl) !important;
+    }
+    html.is-invite-view #link-show-full-lobby {
+      display: block !important;
+    }
+  </style>
 </head>
 <body>
 
@@ -610,6 +639,6 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="js/app.js?v=20261022_3"></script>
+  <script src="js/app.js?v=20261022_4"></script>
 </body>
 </html>
