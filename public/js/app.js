@@ -228,10 +228,22 @@
   // CONEXÃO WEBSOCKET & SINALIZAÇÃO
   // ========================================================================
   function connectWebSocket() {
+    if (state.ws && (state.ws.readyState === WebSocket.CONNECTING || state.ws.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}`;
 
-    state.ws = new WebSocket(wsUrl);
+    updateConnectionIndicator('connecting');
+
+    try {
+      state.ws = new WebSocket(wsUrl);
+    } catch (e) {
+      console.warn('[WS] Erro ao instanciar WebSocket:', e);
+      setTimeout(connectWebSocket, 1500);
+      return;
+    }
 
     state.ws.onopen = () => {
       console.log('[WS] Conectado ao servidor de sinalização');
@@ -241,10 +253,10 @@
     };
 
     state.ws.onclose = () => {
-      console.warn('[WS] Conexão encerrada. Tentando reconectar em 2s...');
+      console.warn('[WS] Conexão encerrada. Reconectando em 1.5s...');
       state.connected = false;
       updateConnectionIndicator('disconnected');
-      setTimeout(connectWebSocket, 2000);
+      setTimeout(connectWebSocket, 1500);
     };
 
     state.ws.onerror = (err) => {
@@ -280,7 +292,36 @@
     };
   }
 
-  function sendRequest(type, data = {}) {
+  /**
+   * Garante que o WebSocket esteja pronto antes de disparar comandos
+   */
+  function ensureWebSocketConnected(maxWaitMs = 8000) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+
+    // Se estiver nulo ou fechado, tenta conectar imediatamente
+    if (!state.ws || state.ws.readyState === WebSocket.CLOSED || state.ws.readyState === WebSocket.CLOSING) {
+      connectWebSocket();
+    }
+
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      const checkInterval = setInterval(() => {
+        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+          clearInterval(checkInterval);
+          resolve();
+        } else if (Date.now() - startTime > maxWaitMs) {
+          clearInterval(checkInterval);
+          reject(new Error('O servidor está iniciando ou reconectando no Render. Por favor, aguarde alguns segundos e tente novamente.'));
+        }
+      }, 200);
+    });
+  }
+
+  async function sendRequest(type, data = {}) {
+    await ensureWebSocketConnected();
+
     return new Promise((resolve, reject) => {
       if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
         return reject(new Error('WebSocket não conectado.'));
