@@ -364,6 +364,20 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        // Espectador solicita keyframe imediato (IDR frame) para sincronização instantânea
+        case 'requestKeyframe': {
+          const { targetPeerId } = data;
+          const room = rooms.get(currentRoomId);
+          if (room) {
+            sendToPeer(room, targetPeerId || room.creatorPeerId, {
+              type: 'notification',
+              event: 'keyframeRequested',
+              fromPeerId: currentPeerId
+            });
+          }
+          break;
+        }
+
         // Mensagens de texto / Chat
         case 'chatMessage': {
           const room = rooms.get(currentRoomId);

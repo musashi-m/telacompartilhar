@@ -368,10 +368,21 @@
         if (state.isHost && state.isBroadcasting && state.screenStream) {
           const existingPc = state.peerConnections.get(viewerPeerId);
           if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer' || existingPc.connectionState === 'connecting')) {
-            console.log(`[P2P] Conexão com ${viewerPeerId} já em andamento (${existingPc.signalingState} / ${existingPc.connectionState}).`);
+            console.log(`[P2P] Conexão com ${viewerPeerId} já em andamento (${existingPc.signalingState} / ${existingPc.connectionState}). Forçando keyframe imediato.`);
+            forceKeyframeOnSender(viewerPeerId);
             return;
           }
           await createOfferForViewer(viewerPeerId, true);
+        }
+        break;
+      }
+
+      // Host recebe pedido de keyframe do espectador
+      case 'keyframeRequested': {
+        const { fromPeerId } = notification;
+        if (state.isHost && state.isBroadcasting) {
+          console.log(`[P2P] Espectador ${fromPeerId} solicitou keyframe IDR imediato`);
+          forceKeyframeOnSender(fromPeerId);
         }
         break;
       }
@@ -409,8 +420,13 @@
         showToast('Transmissão iniciada pelo instrutor. Conectando...', 'info', 3000);
         updateConnectionIndicator('connecting');
 
+        if (dom.placeholderTitle) {
+          dom.placeholderTitle.textContent = 'Conectando à transmissão...';
+          dom.placeholderDesc.textContent = 'Estabelecendo conexão WebRTC em tempo real com o instrutor.';
+        }
+
         // O host já dispara ofertas diretamente para todos os espectadores.
-        // Aguarda a oferta chegar sem colidir; aciona fallback apenas após 3.5s se necessário.
+        // Fallback rápido após 1.2s se a oferta não tiver chegado
         if (!state.isHost) {
           clearTimeout(state.requestStreamTimeout);
           state.requestStreamTimeout = setTimeout(() => {
@@ -419,7 +435,7 @@
               console.log('[P2P] Fallback: solicitando stream após timeout de espera...');
               sendRequest('requestStream').catch(() => {});
             }
-          }, 3500);
+          }, 1200);
         }
         break;
       }
@@ -497,6 +513,91 @@
   // ========================================================================
 
   /**
+   * Prioriza codecs com aceleração por hardware e inicialização instantânea (H264 / VP8) sobre AV1/VP9
+   */
+  function applyCodecPreferences(pc) {
+    try {
+      if (typeof RTCRtpReceiver !== 'undefined' && RTCRtpReceiver.getCapabilities) {
+        const capabilities = RTCRtpReceiver.getCapabilities('video');
+        if (capabilities && capabilities.codecs && capabilities.codecs.length > 0) {
+          const h264 = capabilities.codecs.filter(c => c.mimeType.toLowerCase() === 'video/h264');
+          const vp8 = capabilities.codecs.filter(c => c.mimeType.toLowerCase() === 'video/vp8');
+          const others = capabilities.codecs.filter(c => c.mimeType.toLowerCase() !== 'video/h264' && c.mimeType.toLowerCase() !== 'video/vp8');
+          const preferredCodecs = [...h264, ...vp8, ...others];
+
+          pc.getTransceivers().forEach(transceiver => {
+            if (transceiver.setCodecPreferences) {
+              const kind = transceiver.receiver?.track?.kind || transceiver.sender?.track?.kind;
+              if (kind === 'video' || !kind) {
+                try { transceiver.setCodecPreferences(preferredCodecs); } catch (e) {}
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[P2P] Não foi possível definir preferências de codec:', e);
+    }
+  }
+
+  /**
+   * Força o codificador do navegador do host a emitir um IDR Keyframe imediatamente
+   */
+  async function forceKeyframeOnSender(viewerPeerId) {
+    const pc = state.peerConnections.get(viewerPeerId);
+    if (!pc || !state.screenStream) return;
+
+    const videoTrack = state.screenStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+
+    try {
+      const senders = pc.getSenders();
+      for (const sender of senders) {
+        if (sender.track && sender.track.kind === 'video') {
+          // 1. Tenta API direta de keyFrame via setParameters (Chrome 94+)
+          try {
+            const params = sender.getParameters();
+            if (params && params.encodings && params.encodings.length > 0) {
+              const encodingOptions = params.encodings.map(() => ({ keyFrame: true }));
+              await sender.setParameters(params, { encodingOptions });
+              console.log(`[P2P] Keyframe solicitado com sucesso via setParameters para ${viewerPeerId}`);
+            }
+          } catch (e) {}
+
+          // 2. Re-sincronização de pipeline via replaceTrack (garante novo keyframe em todos os navegadores)
+          try {
+            await sender.replaceTrack(videoTrack);
+            console.log(`[P2P] Track re-sincronizada via replaceTrack para ${viewerPeerId}`);
+          } catch (e) {}
+        }
+      }
+    } catch (err) {
+      console.warn('[P2P] Erro ao forçar keyframe no sender:', err);
+    }
+  }
+
+  /**
+   * Espectador: monitora se os primeiros frames foram decodificados; se não, solicita keyframe ao host
+   */
+  let keyframeCheckTimer = null;
+  function triggerKeyframeCheck(targetPeerId) {
+    if (keyframeCheckTimer) clearInterval(keyframeCheckTimer);
+    let attempts = 0;
+    keyframeCheckTimer = setInterval(() => {
+      attempts++;
+      if (dom.remoteVideo.videoWidth > 0 || attempts > 8) {
+        clearInterval(keyframeCheckTimer);
+        return;
+      }
+      const pc = state.peerConnections.get(targetPeerId);
+      if (pc && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected')) {
+        console.log(`[P2P] Vídeo ainda sem dimensões (${attempts}/8). Solicitando keyframe imediato ao host...`);
+        sendSignal('requestKeyframe', { targetPeerId });
+      }
+    }, 600);
+  }
+
+  /**
    * Cria ou reutiliza uma RTCPeerConnection para um peer específico
    */
   function createPeerConnection(remotePeerId) {
@@ -510,7 +611,10 @@
       iceServers: (state.iceServers && state.iceServers.length > 0) ? state.iceServers : [
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
         { urls: ['stun:stun.cloudflare.com:3478'] }
-      ]
+      ],
+      iceCandidatePoolSize: 2,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
     };
 
     const pc = new RTCPeerConnection(iceConfig);
@@ -527,7 +631,7 @@
       if (event.candidate) {
         sendSignal('rtcIceCandidate', {
           targetPeerId: remotePeerId,
-          candidate: event.candidate.toJSON()
+          candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate
         });
       }
     };
@@ -539,6 +643,14 @@
 
       if (pc.connectionState === 'connected') {
         updateConnectionIndicator('connected');
+        if (state.isHost) {
+          // Dispara keyframe imediato e faz reforços para renderização instantânea no aluno
+          forceKeyframeOnSender(remotePeerId);
+          setTimeout(() => forceKeyframeOnSender(remotePeerId), 300);
+          setTimeout(() => forceKeyframeOnSender(remotePeerId), 800);
+        } else {
+          triggerKeyframeCheck(remotePeerId);
+        }
         if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
           dom.remoteVideo.play().catch(e => console.log('[Video] Play na conexão:', e));
         }
@@ -556,7 +668,7 @@
                 sendRequest('requestStream').catch(() => {});
               }
             }
-          }, 2000);
+          }, 1500);
         }
       }
     };
@@ -567,6 +679,9 @@
 
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateConnectionIndicator('connected');
+        if (state.isHost) {
+          forceKeyframeOnSender(remotePeerId);
+        }
         if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
           dom.remoteVideo.play().catch(() => {});
         }
@@ -590,10 +705,10 @@
     if (!state.isHost || !state.screenStream) return;
 
     if (!forceNew) {
-      // Se já estiver negociando ou conectado com esse viewer, ignora para evitar conflito/glare
       const existingPc = state.peerConnections.get(viewerPeerId);
       if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer')) {
-        console.log(`[P2P] Conexão já em andamento ou ativa com ${viewerPeerId}. Oferta duplicada evitada.`);
+        console.log(`[P2P] Conexão já em andamento com ${viewerPeerId}. Forçando keyframe.`);
+        forceKeyframeOnSender(viewerPeerId);
         return;
       }
     } else {
@@ -602,20 +717,33 @@
 
     const pc = createPeerConnection(viewerPeerId);
 
-    // Adiciona todas as tracks do stream de tela
+    // Adiciona todas as tracks do stream de tela como sendonly
     state.screenStream.getTracks().forEach(track => {
-      pc.addTrack(track, state.screenStream);
+      const sender = pc.addTrack(track, state.screenStream);
+      const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+      if (transceiver) {
+        transceiver.direction = 'sendonly';
+      }
     });
 
-    // Se houver microfone ativo, adiciona também
+    // Se houver microfone ativo, adiciona também como sendonly
     if (state.micStream) {
       state.micStream.getTracks().forEach(track => {
-        pc.addTrack(track, state.micStream);
+        const sender = pc.addTrack(track, state.micStream);
+        const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+        if (transceiver) {
+          transceiver.direction = 'sendonly';
+        }
       });
     }
 
+    applyCodecPreferences(pc);
+
     try {
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: false
+      });
       await pc.setLocalDescription(offer);
 
       await sendRequest('rtcOffer', {
@@ -648,37 +776,38 @@
         dom.remoteVideo.srcObject = stream;
         dom.remoteVideo.muted = true; // ESSENCIAL: Permite reprodução imediata sem bloqueio de autoplay
 
-        const safePlay = () => {
-          dom.remoteVideo.play()
-            .then(() => {
-              dom.placeholderStage.style.display = 'none';
-              dom.streamInfoBadge.style.display = 'flex';
-              dom.liveIndicator.className = 'badge-pulse';
-              dom.liveText.textContent = 'AO VIVO';
-              updateConnectionIndicator('connected');
-            })
-            .catch(err => {
-              console.warn('[Video] Play automático bloqueado pelo navegador:', err);
-            });
+        const markReady = () => {
+          if (dom.remoteVideo.videoWidth > 0 && dom.remoteVideo.videoHeight > 0) {
+            dom.placeholderStage.style.display = 'none';
+            dom.streamInfoBadge.style.display = 'flex';
+            dom.streamInfoText.textContent = `Transmissão Ativa: ${dom.remoteVideo.videoWidth}×${dom.remoteVideo.videoHeight}`;
+            dom.liveIndicator.className = 'badge-pulse';
+            dom.liveText.textContent = 'AO VIVO';
+            updateConnectionIndicator('connected');
+          }
         };
 
-        // Inicia reprodução imediatamente
-        safePlay();
+        dom.remoteVideo.play()
+          .then(markReady)
+          .catch(err => {
+            console.warn('[Video] Play automático pendente:', err);
+          });
 
-        // Garante que toque quando a track receber os primeiros frames
+        // Garante exibição assim que os primeiros frames forem renderizados
         event.track.onunmute = () => {
           console.log('[Video] Track ativa com frames recebidos (onunmute)');
-          safePlay();
+          dom.remoteVideo.play().then(markReady).catch(() => {});
         };
 
         dom.remoteVideo.onloadedmetadata = () => {
-          const w = dom.remoteVideo.videoWidth;
-          const h = dom.remoteVideo.videoHeight;
-          if (w && h) {
-            dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
-          }
-          safePlay();
+          dom.remoteVideo.play().then(markReady).catch(() => {});
         };
+
+        dom.remoteVideo.onloadeddata = markReady;
+        dom.remoteVideo.onresize = markReady;
+
+        // Inicia monitoramento de chegada do keyframe
+        triggerKeyframeCheck(fromPeerId);
 
         // Se o stream de vídeo também trouxer trilha de áudio embutida
         if (event.streams && event.streams[0]) {
@@ -720,18 +849,9 @@
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await sendRequest('rtcAnswer', {
-        targetPeerId: fromPeerId,
-        answer: pc.localDescription.toJSON()
-      });
-
-      console.log(`[P2P] Answer enviada com sucesso para ${fromPeerId}`);
-
-      // Aplica todos os candidatos ICE que chegaram antes ou durante a criação da answer
+      // Aplica imediatamente candidatos ICE que já estavam em buffer
       const pending = state.pendingCandidates.get(fromPeerId) || [];
+      state.pendingCandidates.set(fromPeerId, []);
       for (const candidate of pending) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -739,7 +859,25 @@
           console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
         }
       }
-      state.pendingCandidates.set(fromPeerId, []);
+
+      applyCodecPreferences(pc);
+
+      // Garante que transceivers estejam em recvonly no espectador
+      pc.getTransceivers().forEach(transceiver => {
+        if (transceiver.direction === 'sendrecv' || transceiver.direction === 'sendonly') {
+          transceiver.direction = 'recvonly';
+        }
+      });
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      sendSignal('rtcAnswer', {
+        targetPeerId: fromPeerId,
+        answer: pc.localDescription.toJSON()
+      });
+
+      console.log(`[P2P] Answer enviada com sucesso para ${fromPeerId}`);
     } catch (err) {
       console.error('[P2P] Erro ao processar offer:', err);
     }
@@ -765,6 +903,7 @@
 
       // Aplica candidatos ICE pendentes em buffer
       const pending = state.pendingCandidates.get(fromPeerId) || [];
+      state.pendingCandidates.set(fromPeerId, []);
       for (const candidate of pending) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -772,9 +911,13 @@
           console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
         }
       }
-      state.pendingCandidates.set(fromPeerId, []);
 
       console.log(`[P2P] Conexão P2P estabelecida com espectador ${fromPeerId}`);
+
+      // Força geração de keyframe imediatamente e agenda reforço para renderização instantânea
+      forceKeyframeOnSender(fromPeerId);
+      setTimeout(() => forceKeyframeOnSender(fromPeerId), 300);
+      setTimeout(() => forceKeyframeOnSender(fromPeerId), 900);
     } catch (err) {
       console.error('[P2P] Erro ao processar answer:', err);
     }
@@ -896,10 +1039,10 @@
       const videoTrack = stream.getVideoTracks()[0];
       const audioTracks = stream.getAudioTracks();
 
-      // Ajusta contentHint para otimizar codificador
+      // Garante contentHint 'motion' para que o Chromium mantenha o envio ativo de quadros
       if (videoTrack) {
-        videoTrack.contentHint = isMotion ? 'motion' : 'detail';
-        console.log(`[ScreenShare] contentHint definido como: "${videoTrack.contentHint}"`);
+        videoTrack.contentHint = 'motion';
+        console.log('[ScreenShare] contentHint definido como: "motion" (fluidez contínua)');
 
         // Detecta encerramento nativo pelo botão "Interromper compartilhamento" do navegador
         videoTrack.onended = () => {
@@ -937,12 +1080,19 @@
         }
       });
 
-      // Envia stream para todos os espectadores já conectados
+      // Atualiza lista mais recente de membros antes de ofertar
+      try {
+        await refreshRoomPeers();
+      } catch (e) {}
+
+      // Envia stream para todos os espectadores já conectados de forma paralela
+      const offerPromises = [];
       for (const [peerId, peer] of state.peers.entries()) {
         if (peerId !== state.peerId && peer.role !== 'host') {
-          await createOfferForViewer(peerId, true);
+          offerPromises.push(createOfferForViewer(peerId, true));
         }
       }
+      await Promise.all(offerPromises);
 
       showToast('Transmissão de tela iniciada via WebRTC P2P.', 'ok');
 
