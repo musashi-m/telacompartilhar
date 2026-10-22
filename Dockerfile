@@ -1,12 +1,27 @@
-FROM node:22
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependências básicas, certificados e Node.js 22
+# O Ubuntu 22.04 é o ambiente oficial no qual os binários pré-compilados do mediasoup-worker são gerados
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    python3 \
+    python3-pip \
+    make \
+    g++ \
+    gcc \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copiar manifests de dependências
 COPY package*.json ./
 
-# Instalação rápida: a imagem completa node:22 já inclui todas as libs C++ e Python,
-# permitindo que o mediasoup execute o binário pré-compilado oficial instantaneamente
+# Instalar dependências (o binário pré-compilado do mediasoup roda nativamente no Ubuntu 22.04)
 RUN npm install
 
 # Copiar código-fonte da aplicação
