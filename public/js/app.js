@@ -366,12 +366,13 @@
     const { event } = notification;
 
     switch (event) {
-      // Host recebe pedido de stream de um novo espectador
+      // Host recebe pedido de stream de um novo espectador (ou espectador reconectado)
       case 'viewerRequestsStream': {
         const { viewerPeerId } = notification;
         console.log('[P2P] Espectador solicitou stream:', viewerPeerId);
         if (state.isHost && state.isBroadcasting && state.screenStream) {
-          await createOfferForViewer(viewerPeerId);
+          closePeerConnection(viewerPeerId);
+          await createOfferForViewer(viewerPeerId, true);
         }
         break;
       }
@@ -403,9 +404,13 @@
       case 'streamStarted': {
         const { hostPeerId, streamInfo } = notification;
         console.log('[P2P] Host iniciou transmissão:', hostPeerId);
+        if (hostPeerId) {
+          state.creatorPeerId = hostPeerId;
+        }
         showToast('Transmissão iniciada pelo instrutor.', 'ok');
-        // Espectador solicita o stream
+        // Espectador solicita o stream limpando conexões anteriores
         if (!state.isHost) {
+          closeAllPeerConnections();
           await sendRequest('requestStream');
         }
         break;
@@ -420,19 +425,24 @@
         break;
       }
 
-      // Novo participante real conectado na sala
+      // Novo participante real conectado ou reconectado na sala
       case 'peerJoined': {
         const { peer } = notification;
         state.peers.set(peer.id, peer);
+
+        if (peer.role === 'host') {
+          state.creatorPeerId = peer.id;
+        }
+
         renderPeerList();
-        // Se sou host e estou transmitindo, usa fallback após 1.5s apenas se o viewer ainda não solicitou
-        if (state.isHost && state.isBroadcasting && state.screenStream) {
+        showToast(`${peer.displayName} está na sala`, 'info');
+
+        // Se sou host e estou transmitindo, recria offer para o viewer reconectado
+        if (state.isHost && state.isBroadcasting && state.screenStream && peer.role !== 'host') {
+          closePeerConnection(peer.id);
           setTimeout(() => {
-            const pc = state.peerConnections.get(peer.id);
-            if (!pc || (pc.connectionState !== 'connected' && pc.signalingState === 'stable')) {
-              createOfferForViewer(peer.id);
-            }
-          }, 1500);
+            createOfferForViewer(peer.id, true);
+          }, 500);
         }
         break;
       }
@@ -564,14 +574,18 @@
   /**
    * HOST: Cria offer e envia stream para um espectador específico
    */
-  async function createOfferForViewer(viewerPeerId) {
+  async function createOfferForViewer(viewerPeerId, forceNew = false) {
     if (!state.isHost || !state.screenStream) return;
 
-    // Se já estiver negociando ou conectado com esse viewer, ignora para evitar conflito/glare
-    const existingPc = state.peerConnections.get(viewerPeerId);
-    if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer')) {
-      console.log(`[P2P] Conexão já em andamento ou ativa com ${viewerPeerId}. Oferta duplicada evitada.`);
-      return;
+    if (!forceNew) {
+      // Se já estiver negociando ou conectado com esse viewer, ignora para evitar conflito/glare
+      const existingPc = state.peerConnections.get(viewerPeerId);
+      if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer')) {
+        console.log(`[P2P] Conexão já em andamento ou ativa com ${viewerPeerId}. Oferta duplicada evitada.`);
+        return;
+      }
+    } else {
+      closePeerConnection(viewerPeerId);
     }
 
     const pc = createPeerConnection(viewerPeerId);
@@ -910,7 +924,7 @@
       // Envia stream para todos os espectadores já conectados
       for (const [peerId, peer] of state.peers.entries()) {
         if (peerId !== state.peerId && peer.role !== 'host') {
-          await createOfferForViewer(peerId);
+          await createOfferForViewer(peerId, true);
         }
       }
 
@@ -1302,6 +1316,23 @@
     dom.labelCtrlUsers.textContent = `${count} Online`;
   }
 
+  /**
+   * Sincroniza ativamente a lista de participantes com o servidor
+   */
+  async function refreshRoomPeers() {
+    if (!state.currentRoomId) return;
+    try {
+      const response = await sendRequest('getRoomPeers');
+      if (response && response.peers) {
+        state.peers.clear();
+        response.peers.forEach(p => state.peers.set(p.id, p));
+        renderPeerList();
+      }
+    } catch (e) {
+      // Ignora erro temporário se socket estiver ocupado
+    }
+  }
+
   // ========================================================================
   // CONTROLE DE PERMISSÕES DA UI (CRIADOR VS ESPECTADOR)
   // ========================================================================
@@ -1395,7 +1426,7 @@
   }
 
   // ========================================================================
-  // CRONÔMETRO DA SESSÃO
+  // CRONÔMETRO DA SESSÃO & SINCRONIZAÇÃO PERIÓDICA
   // ========================================================================
   function startSessionTimer() {
     state.sessionStartTime = Date.now();
@@ -1407,6 +1438,11 @@
       const minutes = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
       const seconds = String(elapsed % 60).padStart(2, '0');
       dom.sessionTimer.textContent = `${hours}:${minutes}:${seconds}`;
+
+      // A cada 5 segundos, sincroniza ativamente a lista de efetivo com o servidor
+      if (elapsed > 0 && elapsed % 5 === 0) {
+        refreshRoomPeers();
+      }
     }, 1000);
   }
 
@@ -1881,6 +1917,7 @@
     on(dom.btnCtrlUsers, 'click', () => {
       if (dom.sidebarPanel) dom.sidebarPanel.classList.remove('collapsed');
       switchTab('tab-users');
+      refreshRoomPeers();
     });
 
     on(dom.btnCtrlChat, 'click', () => {
@@ -1947,6 +1984,9 @@
         btn.addEventListener('click', () => {
           const tabId = btn.getAttribute('data-tab');
           switchTab(tabId);
+          if (tabId === 'tab-users') {
+            refreshRoomPeers();
+          }
         });
       });
     }

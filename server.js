@@ -208,6 +208,16 @@ wss.on('connection', (ws) => {
           }
           const assignedRole = isHost ? 'host' : 'spectator';
 
+          // Se este mesmo peer já estava registrado com outro WebSocket (reconexão rápida),
+          // desassocia o socket antigo para evitar que o fechamento dele dispare limpeza
+          const existingPeer = room.peers.get(peerId);
+          if (existingPeer && existingPeer.ws && existingPeer.ws !== ws) {
+            console.log(`[Sala ${cleanRoomId}] Substituindo conexão antiga de "${displayName}" (${peerId})`);
+            try {
+              existingPeer.ws.close();
+            } catch (e) {}
+          }
+
           const peer = {
             id: peerId,
             displayName: displayName || `Operador-${peerId.substring(0, 4)}`,
@@ -418,6 +428,19 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        // Consulta lista atualizada de participantes da sala
+        case 'getRoomPeers': {
+          const room = rooms.get(currentRoomId);
+          if (!room) throw new Error('Sala não encontrada.');
+          const list = Array.from(room.peers.values()).map(p => ({
+            id: p.id,
+            displayName: p.displayName,
+            role: p.role
+          }));
+          sendResponse(id, { peers: list });
+          break;
+        }
+
         default:
           console.warn(`[WS] Tipo de mensagem desconhecido: ${type}`);
           sendResponse(id, null, 'Mensagem não reconhecida');
@@ -436,6 +459,14 @@ wss.on('connection', (ws) => {
 
     const peer = room.peers.get(currentPeerId);
     if (!peer) return;
+
+    // Proteção crucial contra race condition no reload (F5):
+    // Se o peer na sala já estiver associado a uma nova conexão WebSocket,
+    // o fechamento deste socket antigo NÃO deve remover o peer nem enviar peerLeft!
+    if (peer.ws !== ws) {
+      console.log(`[Sala ${currentRoomId}] Conexão anterior de "${peer.displayName}" (${currentPeerId}) fechada, mas peer já ativo em novo socket.`);
+      return;
+    }
 
     console.log(`[Sala ${currentRoomId}] Peer desconectado: "${peer.displayName}" (${currentPeerId})`);
 
