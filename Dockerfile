@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # Instalar dependências necessárias para o mediasoup compilar seu worker nativo
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -16,7 +16,7 @@ WORKDIR /app
 # Copiar manifests de pacotes
 COPY package*.json ./
 
-# Instalar dependências (o mediasoup compilará o worker usando python3 -m pip)
+# Instalar dependências (compatível com Node 22+)
 RUN npm install
 
 # Copiar código-fonte da aplicação
