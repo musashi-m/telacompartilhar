@@ -1,10 +1,11 @@
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 # Instalar dependências de compilação necessárias para o worker C++ do mediasoup
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    python3-pip \
-    build-essential \
+    make \
+    g++ \
+    gcc \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
