@@ -226,6 +226,12 @@
                   }
                   if (r) {
                     r = r.trim().toUpperCase();
+                    // Se o usuário for o instrutor criador desta sala, não exige senha de convidado
+                    var isHost = false;
+                    try {
+                      if (localStorage.getItem('pmesp_host_token_' + r)) isHost = true;
+                    } catch(e) {}
+
                     var codeInp = document.getElementById('join-code');
                     if (codeInp) { codeInp.value = r; codeInp.readOnly = true; }
                     var nameEl = document.getElementById('join-invite-room-name');
@@ -235,18 +241,20 @@
                     var grp = document.getElementById('join-code-group');
                     if (grp) grp.style.display = 'none';
 
-                    // Consulta imediatamente se a sala requer senha
-                    fetch('/api/room/' + encodeURIComponent(r))
-                      .then(function(res) { return res.json(); })
-                      .then(function(info) {
-                        if (info && info.hasPassword) {
-                          var pwGrp = document.getElementById('join-password-group');
-                          if (pwGrp) pwGrp.style.display = 'block';
-                          var pwInp = document.getElementById('join-password');
-                          if (pwInp) pwInp.focus();
-                        }
-                      })
-                      .catch(function() {});
+                    if (!isHost) {
+                      // Consulta se a sala requer senha
+                      fetch('/api/room/' + encodeURIComponent(r))
+                        .then(function(res) { return res.json(); })
+                        .then(function(info) {
+                          if (info && info.hasPassword) {
+                            var pwGrp = document.getElementById('join-password-group');
+                            if (pwGrp) pwGrp.style.display = 'block';
+                            var pwInp = document.getElementById('join-password');
+                            if (pwInp) pwInp.focus();
+                          }
+                        })
+                        .catch(function() {});
+                    }
                   }
                 })();
               </script>

@@ -149,7 +149,7 @@ wss.on('connection', (ws) => {
 
         // Entrar ou criar sala
         case 'join': {
-          const { roomId, peerId, displayName, isCreating, topic, password } = data;
+          const { roomId, peerId, displayName, isCreating, topic, password, hostToken } = data;
           const cleanRoomId = String(roomId || '').trim().toUpperCase();
           currentRoomId = cleanRoomId;
           currentPeerId = peerId;
@@ -159,11 +159,13 @@ wss.on('connection', (ws) => {
 
           if (isRoomNew) {
             const cleanPin = (password && String(password).trim().length === 4) ? String(password).trim() : null;
+            const generatedHostToken = 'ht-' + Math.random().toString(36).substring(2, 12);
             room = {
               id: cleanRoomId,
               topic: topic || 'Instrução Operacional',
               createdAt: Date.now(),
               creatorPeerId: peerId,
+              hostToken: generatedHostToken,
               password: cleanPin,
               peers: new Map(),
               hasActiveStream: false
@@ -173,8 +175,14 @@ wss.on('connection', (ws) => {
           } else {
             room = rooms.get(cleanRoomId);
 
-            // Validação de Senha (se a sala for protegida e quem está entrando não for o criador original)
-            if (room.password && room.creatorPeerId !== peerId) {
+            // Validação de Host persistente (se possuir o hostToken emitido na criação ou mesmo peerId)
+            const isHostAttempt = Boolean(
+              (hostToken && room.hostToken && hostToken === room.hostToken) ||
+              (room.creatorPeerId === peerId)
+            );
+
+            // Validação de Senha (se a sala for protegida e quem está entrando NÃO for o instrutor)
+            if (room.password && !isHostAttempt) {
               const providedPin = password ? String(password).trim() : '';
               if (!providedPin) {
                 return sendResponse(id, null, 'SENHA_OBRIGATORIA');
@@ -183,9 +191,18 @@ wss.on('connection', (ws) => {
                 return sendResponse(id, null, 'SENHA_INCORRETA');
               }
             }
+
+            if (isHostAttempt) {
+              // Reatribui o criador ao peerId atual do instrutor após recarregar a página
+              room.creatorPeerId = peerId;
+            }
           }
 
-          const isHost = (room.creatorPeerId === peerId) || (isCreating && isRoomNew);
+          const isHost = Boolean(
+            (room.creatorPeerId === peerId) ||
+            (hostToken && room.hostToken && hostToken === room.hostToken) ||
+            (isCreating && isRoomNew)
+          );
           if (isHost && !room.creatorPeerId) {
             room.creatorPeerId = peerId;
           }
@@ -200,7 +217,7 @@ wss.on('connection', (ws) => {
 
           room.peers.set(peerId, peer);
 
-          console.log(`[Sala ${roomId}] Peer conectado: "${peer.displayName}" (${peerId}) como [${peer.role}] - Total: ${room.peers.size}`);
+          console.log(`[Sala ${cleanRoomId}] Peer conectado: "${peer.displayName}" (${peerId}) como [${peer.role}] - Total: ${room.peers.size}`);
 
           // Notifica os outros membros da sala sobre o novo participante
           broadcastToRoom(room, {
@@ -236,6 +253,7 @@ wss.on('connection', (ws) => {
             isHost,
             role: assignedRole,
             creatorPeerId: room.creatorPeerId,
+            hostToken: isHost ? room.hostToken : null,
             peers: existingPeers,
             hasActiveStream: room.hasActiveStream,
             hasPassword: !!room.password,
@@ -435,15 +453,16 @@ wss.on('connection', (ws) => {
       peerId: currentPeerId
     });
 
-    // Se não sobrar ninguém, remove a sala após 30s
+    const roomToClean = currentRoomId;
+    // Se não sobrar ninguém, remove a sala após 60s de tolerância para reload/reconexão
     if (room.peers.size === 0) {
       setTimeout(() => {
-        const checkRoom = rooms.get(currentRoomId);
+        const checkRoom = rooms.get(roomToClean);
         if (checkRoom && checkRoom.peers.size === 0) {
-          console.log(`[Sala] Removendo sala inativa: ${currentRoomId}`);
-          rooms.delete(currentRoomId);
+          console.log(`[Sala] Removendo sala inativa após tolerância: ${roomToClean}`);
+          rooms.delete(roomToClean);
         }
-      }, 30000);
+      }, 60000);
     }
 
     currentRoomId = null;

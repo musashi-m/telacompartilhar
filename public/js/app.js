@@ -16,9 +16,19 @@
     requestId: 0,
     pendingRequests: new Map(),
 
-    // Identificação do Usuário Local
-    peerId: 'peer-' + Math.random().toString(36).substring(2, 9),
-    displayName: 'Operador Local',
+    // Identificação do Usuário Local Persistente (sobrevive a F5 / reload)
+    peerId: (function() {
+      let id = null;
+      try { id = localStorage.getItem('pmesp_peer_id'); } catch (e) {}
+      if (!id || typeof id !== 'string' || !id.startsWith('peer-')) {
+        id = 'peer-' + Math.random().toString(36).substring(2, 9);
+        try { localStorage.setItem('pmesp_peer_id', id); } catch (e) {}
+      }
+      return id;
+    })(),
+    displayName: (function() {
+      try { return localStorage.getItem('pmesp_user_name') || 'Operador Local'; } catch (e) { return 'Operador Local'; }
+    })(),
     role: 'spectator', // 'host' ou 'spectator'
     isHost: false,
     creatorPeerId: null,
@@ -149,6 +159,7 @@
     btnCtrlUsers: document.getElementById('btn-ctrl-users'),
     labelCtrlUsers: document.getElementById('label-ctrl-users'),
     btnCtrlChat: document.getElementById('btn-ctrl-chat'),
+    btnCtrlStats: document.getElementById('btn-ctrl-stats'),
     btnCtrlExit: document.getElementById('btn-ctrl-exit'),
     iconCtrlExit: document.getElementById('icon-ctrl-exit'),
     labelCtrlExit: document.getElementById('label-ctrl-exit'),
@@ -1516,14 +1527,28 @@
     try {
       showToast(`Conectando à sala ${roomId}...`, 'info');
 
+      // Recupera hostToken salvo se este usuário for o criador original da sala
+      let storedHostToken = null;
+      try {
+        storedHostToken = localStorage.getItem(`pmesp_host_token_${roomId}`);
+      } catch (e) {}
+
       const response = await sendRequest('join', {
         roomId,
         peerId: state.peerId,
         displayName: state.displayName,
         isCreating: isCreating,
         topic,
-        password
+        password,
+        hostToken: storedHostToken
       });
+
+      // Salva hostToken permanentemente se emitido para o host
+      if (response.hostToken) {
+        try {
+          localStorage.setItem(`pmesp_host_token_${response.roomId}`, response.hostToken);
+        } catch (e) {}
+      }
 
       state.currentRoomId = response.roomId;
       state.currentRoomTopic = response.topic || topic;
@@ -1531,6 +1556,18 @@
       state.role = response.role || (state.isHost ? 'host' : 'spectator');
       state.creatorPeerId = response.creatorPeerId;
       state.iceServers = response.iceServers || [];
+
+      // Persiste sessão ativa no sessionStorage (mantém conectado caso a página seja recarregada)
+      try {
+        sessionStorage.setItem('pmesp_active_room', JSON.stringify({
+          roomId: response.roomId,
+          topic: state.currentRoomTopic,
+          isHost: state.isHost,
+          role: state.role,
+          displayName: state.displayName,
+          password: password
+        }));
+      } catch (e) {}
 
       // Aplica regras de permissão da interface
       applyRolePermissions();
@@ -1563,7 +1600,7 @@
       renderPeerList();
 
       if (state.isHost) {
-        showToast(`Sala criada com sucesso! Use o botão "Copiar Link da Sala" acima para convidar os alunos.`, 'ok', 6000);
+        showToast(`Sala conectada! Use o botão "Copiar Link da Sala" acima para convidar os alunos.`, 'ok', 6000);
       } else {
         showToast(`Você ingressou na sala como espectador.`, 'ok');
       }
@@ -1586,6 +1623,7 @@
       } else {
         showToast(`Falha ao entrar na sala: ${err.message}`, 'error');
       }
+      throw err;
     }
   }
 
@@ -1606,6 +1644,14 @@
     }
 
     closeAllPeerConnections();
+
+    // Limpa sessão persistida
+    try {
+      sessionStorage.removeItem('pmesp_active_room');
+      if (state.currentRoomId) {
+        localStorage.removeItem(`pmesp_host_token_${state.currentRoomId}`);
+      }
+    } catch (e) {}
 
     // Limpa estado local
     state.currentRoomId = null;
@@ -1760,87 +1806,95 @@
   }
 
   // ========================================================================
-  // BINDING DE EVENTOS DA INTERFACE
+  // BINDING DE EVENTOS DA INTERFACE (DEFENSIVO & ROBUSTO)
   // ========================================================================
   function initEventBindings() {
+    const on = (el, evt, fn) => {
+      if (el) el.addEventListener(evt, fn);
+    };
+
     // Botões do Lobby
-    dom.btnCreateRoom.addEventListener('click', createAndJoinRoom);
-    dom.btnJoinRoom.addEventListener('click', joinExistingRoom);
-    dom.btnRefreshRooms.addEventListener('click', fetchRoomsList);
+    on(dom.btnCreateRoom, 'click', createAndJoinRoom);
+    on(dom.btnJoinRoom, 'click', joinExistingRoom);
+    on(dom.btnRefreshRooms, 'click', fetchRoomsList);
 
     // Botões de Compartilhar Link
-    if (dom.btnCopyLink) dom.btnCopyLink.addEventListener('click', copyInviteLink);
-    if (dom.btnCopyInviteSidebar) dom.btnCopyInviteSidebar.addEventListener('click', copyInviteLink);
+    on(dom.btnCopyLink, 'click', copyInviteLink);
+    on(dom.btnCopyInviteSidebar, 'click', copyInviteLink);
 
-    // Atalhos de Teclado (Enter para entrar ou criar sala rapidamente)
-    dom.inputJoinUsername.addEventListener('keydown', (e) => {
+    // Atalhos de Teclado
+    on(dom.inputJoinUsername, 'keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         joinExistingRoom();
       }
     });
 
-    dom.inputJoinCode.addEventListener('keydown', (e) => {
+    on(dom.inputJoinCode, 'keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        dom.inputJoinUsername.focus();
-        dom.inputJoinUsername.select();
+        if (dom.inputJoinUsername) {
+          dom.inputJoinUsername.focus();
+          dom.inputJoinUsername.select();
+        }
       }
     });
 
-    dom.inputCreateUsername.addEventListener('keydown', (e) => {
+    on(dom.inputCreateUsername, 'keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         createAndJoinRoom();
       }
     });
 
-    dom.inputCreateTopic.addEventListener('keydown', (e) => {
+    on(dom.inputCreateTopic, 'keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        dom.inputCreateUsername.focus();
-        dom.inputCreateUsername.select();
+        if (dom.inputCreateUsername) {
+          dom.inputCreateUsername.focus();
+          dom.inputCreateUsername.select();
+        }
       }
     });
 
     // Iniciar Compartilhamento pelo Stage
-    dom.btnStageStartShare.addEventListener('click', () => {
-      dom.modalSettings.classList.add('active');
+    on(dom.btnStageStartShare, 'click', () => {
+      if (dom.modalSettings) dom.modalSettings.classList.add('active');
     });
 
-    // Controles Inferiores
-    dom.btnCtrlScreen.addEventListener('click', () => {
+    // Controles Inferiores da Transmissão
+    on(dom.btnCtrlScreen, 'click', () => {
       if (state.isBroadcasting) {
         stopScreenSharing();
       } else {
-        dom.modalSettings.classList.add('active');
+        if (dom.modalSettings) dom.modalSettings.classList.add('active');
       }
     });
 
-    dom.btnCtrlCam.addEventListener('click', toggleWebcam);
-    dom.btnCtrlMic.addEventListener('click', toggleMicrophone);
+    on(dom.btnCtrlCam, 'click', toggleWebcam);
+    on(dom.btnCtrlMic, 'click', toggleMicrophone);
 
-    dom.btnCtrlSettings.addEventListener('click', () => {
-      dom.modalSettings.classList.add('active');
+    on(dom.btnCtrlSettings, 'click', () => {
+      if (dom.modalSettings) dom.modalSettings.classList.add('active');
     });
 
-    dom.btnCtrlUsers.addEventListener('click', () => {
-      dom.sidebarPanel.classList.remove('collapsed');
+    on(dom.btnCtrlUsers, 'click', () => {
+      if (dom.sidebarPanel) dom.sidebarPanel.classList.remove('collapsed');
       switchTab('tab-users');
     });
 
-    dom.btnCtrlChat.addEventListener('click', () => {
-      dom.sidebarPanel.classList.remove('collapsed');
+    on(dom.btnCtrlChat, 'click', () => {
+      if (dom.sidebarPanel) dom.sidebarPanel.classList.remove('collapsed');
       switchTab('tab-chat');
     });
 
-    dom.btnCtrlStats.addEventListener('click', () => {
-      dom.sidebarPanel.classList.remove('collapsed');
+    on(dom.btnCtrlStats, 'click', () => {
+      if (dom.sidebarPanel) dom.sidebarPanel.classList.remove('collapsed');
       switchTab('tab-telemetry');
     });
 
-    dom.btnTogglePanel.addEventListener('click', () => {
-      dom.sidebarPanel.classList.toggle('collapsed');
+    on(dom.btnTogglePanel, 'click', () => {
+      if (dom.sidebarPanel) dom.sidebarPanel.classList.toggle('collapsed');
     });
 
     // Senha de 4 dígitos - Toggle no card de criação
@@ -1856,88 +1910,87 @@
         }
       };
 
-      dom.createRequirePassword.addEventListener('change', syncPasswordVisibility);
-      dom.createRequirePassword.addEventListener('click', syncPasswordVisibility);
+      on(dom.createRequirePassword, 'change', syncPasswordVisibility);
+      on(dom.createRequirePassword, 'click', syncPasswordVisibility);
       syncPasswordVisibility();
     }
 
-    if (dom.createPassword) {
-      dom.createPassword.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          createAndJoinRoom();
-        }
-      });
-    }
+    on(dom.createPassword, 'keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        createAndJoinRoom();
+      }
+    });
 
-    if (dom.joinPassword) {
-      dom.joinPassword.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          joinExistingRoom();
-        }
-      });
-    }
+    on(dom.joinPassword, 'keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        joinExistingRoom();
+      }
+    });
 
     // Botão para ver lobby completo caso tenha entrado por link
-    if (dom.btnShowCreateRoom) {
-      dom.btnShowCreateRoom.addEventListener('click', (e) => {
-        e.preventDefault();
-        showFullLobby();
-      });
-    }
+    on(dom.btnShowCreateRoom, 'click', (e) => {
+      e.preventDefault();
+      showFullLobby();
+    });
 
     // Chat
-    dom.btnSendChat.addEventListener('click', sendChatMessage);
-    dom.chatInput.addEventListener('keydown', (e) => {
+    on(dom.btnSendChat, 'click', sendChatMessage);
+    on(dom.chatInput, 'keydown', (e) => {
       if (e.key === 'Enter') sendChatMessage();
     });
 
     // Abas do Painel Lateral
-    dom.tabButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tabId = btn.getAttribute('data-tab');
-        switchTab(tabId);
-      });
-    });
-
-    function switchTab(tabId) {
-      dom.tabButtons.forEach(b => {
-        if (b.getAttribute('data-tab') === tabId) b.classList.add('active');
-        else b.classList.remove('active');
-      });
-
-      dom.tabContents.forEach(c => {
-        if (c.id === tabId) c.classList.add('active');
-        else c.classList.remove('active');
+    if (dom.tabButtons) {
+      dom.tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tabId = btn.getAttribute('data-tab');
+          switchTab(tabId);
+        });
       });
     }
 
+    function switchTab(tabId) {
+      if (dom.tabButtons) {
+        dom.tabButtons.forEach(b => {
+          if (b.getAttribute('data-tab') === tabId) b.classList.add('active');
+          else b.classList.remove('active');
+        });
+      }
+
+      if (dom.tabContents) {
+        dom.tabContents.forEach(c => {
+          if (c.id === tabId) c.classList.add('active');
+          else c.classList.remove('active');
+        });
+      }
+    }
+
     // Presets no Modal
-    dom.presetCardMotion.addEventListener('click', () => {
-      dom.presetCardMotion.classList.add('selected');
-      dom.presetCardDetail.classList.remove('selected');
+    on(dom.presetCardMotion, 'click', () => {
+      if (dom.presetCardMotion) dom.presetCardMotion.classList.add('selected');
+      if (dom.presetCardDetail) dom.presetCardDetail.classList.remove('selected');
       state.preferences.preset = 'motion';
     });
 
-    dom.presetCardDetail.addEventListener('click', () => {
-      dom.presetCardDetail.classList.add('selected');
-      dom.presetCardMotion.classList.remove('selected');
+    on(dom.presetCardDetail, 'click', () => {
+      if (dom.presetCardDetail) dom.presetCardDetail.classList.add('selected');
+      if (dom.presetCardMotion) dom.presetCardMotion.classList.remove('selected');
       state.preferences.preset = 'detail';
     });
 
-    dom.btnModalCancel.addEventListener('click', () => {
-      dom.modalSettings.classList.remove('active');
+    on(dom.btnModalCancel, 'click', () => {
+      if (dom.modalSettings) dom.modalSettings.classList.remove('active');
     });
 
-    dom.btnModalApply.addEventListener('click', async () => {
-      state.preferences.maxResolution = dom.selectResolution.value;
-      state.preferences.maxFps = dom.selectFps.value;
-      state.preferences.systemAudio = dom.checkSystemAudio.checked;
+    on(dom.btnModalApply, 'click', async () => {
+      if (dom.selectResolution) state.preferences.maxResolution = dom.selectResolution.value;
+      if (dom.selectFps) state.preferences.maxFps = dom.selectFps.value;
+      if (dom.checkSystemAudio) state.preferences.systemAudio = dom.checkSystemAudio.checked;
 
-      dom.modalSettings.classList.remove('active');
+      if (dom.modalSettings) dom.modalSettings.classList.remove('active');
 
-      // Se ainda não estiver compartilhando tela, inicia
       if (!state.isBroadcasting) {
         await startScreenSharing();
       } else {
@@ -1946,7 +1999,7 @@
     });
 
     // Modal de Saída / Encerramento
-    dom.btnCtrlExit.addEventListener('click', () => {
+    on(dom.btnCtrlExit, 'click', () => {
       if (state.isHost) {
         if (dom.modalExitIcon) {
           dom.modalExitIcon.textContent = 'power_settings_new';
@@ -1974,14 +2027,14 @@
           dom.btnExitConfirm.style.backgroundColor = 'var(--primary-container)';
         }
       }
-      dom.modalExit.classList.add('active');
+      if (dom.modalExit) dom.modalExit.classList.add('active');
     });
 
-    dom.btnExitCancel.addEventListener('click', () => {
-      dom.modalExit.classList.remove('active');
+    on(dom.btnExitCancel, 'click', () => {
+      if (dom.modalExit) dom.modalExit.classList.remove('active');
     });
 
-    dom.btnExitConfirm.addEventListener('click', () => {
+    on(dom.btnExitConfirm, 'click', () => {
       if (state.isHost) {
         endRoomDefinitively();
       } else {
@@ -1992,12 +2045,10 @@
     // Desbloqueio Global de Áudio (Autoplay Policy do Navegador)
     document.addEventListener('click', unlockAudio, { passive: true });
     document.addEventListener('keydown', unlockAudio, { passive: true });
-    if (dom.btnUnmuteAudio) {
-      dom.btnUnmuteAudio.addEventListener('click', (e) => {
-        e.stopPropagation();
-        unlockAudio();
-      });
-    }
+    on(dom.btnUnmuteAudio, 'click', (e) => {
+      e.stopPropagation();
+      unlockAudio();
+    });
   }
 
   // ========================================================================
@@ -2182,12 +2233,58 @@
   }
 
   // ========================================================================
+  // RESTAURAÇÃO DE SESSÃO PERSISTENTE (F5 / RELOAD) OU LINK DE CONVITE
+  // ========================================================================
+  async function checkActiveSessionOrInvite() {
+    let activeSession = null;
+    try {
+      const raw = sessionStorage.getItem('pmesp_active_room');
+      if (raw) activeSession = JSON.parse(raw);
+    } catch (e) {}
+
+    const urlRoom = getRoomFromUrl();
+
+    // Caso 1: O usuário estava dentro de uma sala ativa antes do reload (F5)
+    // OU o usuário possui o hostToken salvo para a sala da URL (instrutor criador)
+    const targetRoom = (activeSession && activeSession.roomId)
+      ? activeSession.roomId
+      : (urlRoom && localStorage.getItem(`pmesp_host_token_${urlRoom}`) ? urlRoom : null);
+
+    if (targetRoom) {
+      const cleanRoom = targetRoom.trim().toUpperCase();
+      const isSavedHost = activeSession ? Boolean(activeSession.isHost) : Boolean(localStorage.getItem(`pmesp_host_token_${cleanRoom}`));
+      const topic = (activeSession && activeSession.topic) ? activeSession.topic : 'Instrução Operacional';
+      const savedPass = (activeSession && activeSession.password) ? activeSession.password : null;
+      const savedName = (activeSession && activeSession.displayName) || localStorage.getItem('pmesp_user_name') || (isSavedHost ? 'Instrutor Titular' : 'Operador Local');
+
+      state.displayName = savedName;
+      if (dom.headerUserDisplay) dom.headerUserDisplay.textContent = savedName;
+      if (dom.headerUserAvatar) dom.headerUserAvatar.textContent = savedName.substring(0, 2).toUpperCase();
+
+      try {
+        console.log(`[Session] Restaurando sessão da sala ${cleanRoom} (Host: ${isSavedHost})...`);
+        showToast(`Reconectando à sala ${cleanRoom}...`, 'info', 3000);
+        await joinRoom(cleanRoom, topic, false, savedPass);
+        return; // Reconexão concluída com sucesso!
+      } catch (err) {
+        console.warn('[Session] Não foi possível restaurar sessão anterior:', err);
+        try {
+          sessionStorage.removeItem('pmesp_active_room');
+        } catch (e) {}
+      }
+    }
+
+    // Caso 2: Não há sessão para restaurar. Processa como convite de URL ou lobby normal
+    checkUrlInvite();
+  }
+
+  // ========================================================================
   // INICIALIZAÇÃO ROBUSTA
   // ========================================================================
   function initApp() {
     initEventBindings();
     connectWebSocket();
-    checkUrlInvite();
+    checkActiveSessionOrInvite();
   }
 
   if (document.readyState === 'loading') {
