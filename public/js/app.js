@@ -30,7 +30,15 @@
     sessionTimerInterval: null,
 
     // WebRTC P2P
-    iceServers: [],
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.services.mozilla.com' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ],
     peerConnections: new Map(),  // peerId -> RTCPeerConnection
     pendingCandidates: new Map(), // peerId -> [candidates] (antes de remoteDescription)
 
@@ -350,11 +358,14 @@
         const { peer } = notification;
         state.peers.set(peer.id, peer);
         renderPeerList();
-        showToast(`${peer.displayName} ingressou na sala`, 'info');
-
-        // Se sou host e estou transmitindo, envio stream para o novo viewer
+        // Se sou host e estou transmitindo, usa fallback após 1.5s apenas se o viewer ainda não solicitou
         if (state.isHost && state.isBroadcasting && state.screenStream) {
-          setTimeout(() => createOfferForViewer(peer.id), 500);
+          setTimeout(() => {
+            const pc = state.peerConnections.get(peer.id);
+            if (!pc || (pc.connectionState !== 'connected' && pc.signalingState === 'stable')) {
+              createOfferForViewer(peer.id);
+            }
+          }, 1500);
         }
         break;
       }
@@ -392,20 +403,38 @@
   // ========================================================================
 
   /**
-   * Cria uma RTCPeerConnection para um peer específico
+   * Cria ou reutiliza uma RTCPeerConnection para um peer específico
    */
   function createPeerConnection(remotePeerId) {
-    // Fecha qualquer conexão existente com esse peer
-    closePeerConnection(remotePeerId);
+    const existingPc = state.peerConnections.get(remotePeerId);
+    if (existingPc) {
+      try { existingPc.close(); } catch (e) {}
+      state.peerConnections.delete(remotePeerId);
+    }
 
-    const pc = new RTCPeerConnection({
-      iceServers: state.iceServers
-    });
+    const iceConfig = {
+      iceServers: (state.iceServers && state.iceServers.length > 0) ? state.iceServers : [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+      ],
+      iceCandidatePoolSize: 2
+    };
+
+    const pc = new RTCPeerConnection(iceConfig);
 
     state.peerConnections.set(remotePeerId, pc);
-    state.pendingCandidates.set(remotePeerId, []);
 
-    // Envia ICE candidates via sinalização
+    // IMPORTANTE: NÃO sobreescrever candidatos que já tenham chegado via WebSocket antes do PC ser criado!
+    if (!state.pendingCandidates.has(remotePeerId)) {
+      state.pendingCandidates.set(remotePeerId, []);
+    }
+
+    // Envia ICE candidates via sinalização imediatamente
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         sendSignal('rtcIceCandidate', {
@@ -415,19 +444,42 @@
       }
     };
 
-    // Log de estado da conexão
+    // Monitoramento de estado de conexão
     pc.onconnectionstatechange = () => {
       console.log(`[P2P] Conexão com ${remotePeerId}: ${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         updateConnectionIndicator('connected');
+        // Garante que o vídeo toque ao conectar
+        if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
+          dom.remoteVideo.play().catch(e => console.log('[Video] Play na conexão:', e));
+        }
       } else if (pc.connectionState === 'failed') {
         updateConnectionIndicator('error');
-        showToast('Conexão P2P falhou. Tentando reconectar...', 'warn');
+        console.warn(`[P2P] Conexão falhou com ${remotePeerId}. Tentando auto-recuperação...`);
+        // Se for espectador e a conexão falhou, tenta solicitar novo stream após 1s
+        if (!state.isHost) {
+          setTimeout(() => {
+            if (!state.isHost && state.currentRoomId) {
+              sendRequest('requestStream').catch(() => {});
+            }
+          }, 1000);
+        }
       }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[P2P] ICE State com ${remotePeerId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        updateConnectionIndicator('connected');
+        if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
+          dom.remoteVideo.play().catch(() => {});
+        }
+      } else if (pc.iceConnectionState === 'failed') {
+        console.warn(`[P2P] ICE falhou com ${remotePeerId}.`);
+        if (state.isHost) {
+          try { pc.restartIce(); } catch (e) {}
+        }
+      }
     };
 
     return pc;
@@ -437,16 +489,23 @@
    * HOST: Cria offer e envia stream para um espectador específico
    */
   async function createOfferForViewer(viewerPeerId) {
-    const pc = createPeerConnection(viewerPeerId);
+    if (!state.isHost || !state.screenStream) return;
 
-    // Adiciona todas as tracks do stream ativo
-    if (state.screenStream) {
-      state.screenStream.getTracks().forEach(track => {
-        pc.addTrack(track, state.screenStream);
-      });
+    // Se já estiver negociando ou conectado com esse viewer, ignora para evitar conflito/glare
+    const existingPc = state.peerConnections.get(viewerPeerId);
+    if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer')) {
+      console.log(`[P2P] Conexão já em andamento ou ativa com ${viewerPeerId}. Oferta duplicada evitada.`);
+      return;
     }
 
-    // Se tem microfone ativo, adiciona também
+    const pc = createPeerConnection(viewerPeerId);
+
+    // Adiciona todas as tracks do stream de tela
+    state.screenStream.getTracks().forEach(track => {
+      pc.addTrack(track, state.screenStream);
+    });
+
+    // Se houver microfone ativo, adiciona também
     if (state.micStream) {
       state.micStream.getTracks().forEach(track => {
         pc.addTrack(track, state.micStream);
@@ -462,53 +521,78 @@
         offer: pc.localDescription.toJSON()
       });
 
-      console.log(`[P2P] Offer enviada para ${viewerPeerId}`);
+      console.log(`[P2P] Offer enviada com sucesso para ${viewerPeerId}`);
     } catch (err) {
-      console.error('[P2P] Erro ao criar offer:', err);
+      console.error('[P2P] Erro ao criar/enviar offer:', err);
     }
   }
 
   /**
-   * ESPECTADOR: Recebe offer do host, cria answer
+   * ESPECTADOR: Recebe offer do host, configura player de vídeo e cria answer
    */
   async function handleIncomingOffer(fromPeerId, offer) {
+    console.log(`[P2P] Processando offer de ${fromPeerId}...`);
     const pc = createPeerConnection(fromPeerId);
 
-    // Configura handler para receber tracks remotas
+    // Configura recepção de tracks remotas
     pc.ontrack = (event) => {
-      console.log(`[P2P] Track recebida: ${event.track.kind} de ${fromPeerId}`);
+      console.log(`[P2P] Track recebida: tipo=${event.track.kind}, id=${event.track.id}`);
 
       if (event.track.kind === 'video') {
-        dom.remoteVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
-        dom.placeholderStage.style.display = 'none';
-        dom.streamInfoBadge.style.display = 'flex';
-        dom.liveIndicator.className = 'badge-pulse';
-        dom.liveText.textContent = 'AO VIVO';
+        const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+        dom.remoteVideo.srcObject = stream;
+        dom.remoteVideo.muted = true; // ESSENCIAL: Permite reprodução imediata sem bloqueio de autoplay
 
-        // Inicia telemetria com a peer connection
-        startTelemetryStats(pc);
+        const safePlay = () => {
+          dom.remoteVideo.play()
+            .then(() => {
+              dom.placeholderStage.style.display = 'none';
+              dom.streamInfoBadge.style.display = 'flex';
+              dom.liveIndicator.className = 'badge-pulse';
+              dom.liveText.textContent = 'AO VIVO';
+            })
+            .catch(err => {
+              console.warn('[Video] Play automático bloqueado pelo navegador:', err);
+            });
+        };
 
-        // Atualiza info quando os metadados do vídeo carregam
+        // Inicia reprodução imediatamente
+        safePlay();
+
+        // Garante que toque quando a track receber os primeiros frames
+        event.track.onunmute = () => {
+          console.log('[Video] Track ativa com frames recebidos (onunmute)');
+          safePlay();
+        };
+
         dom.remoteVideo.onloadedmetadata = () => {
           const w = dom.remoteVideo.videoWidth;
           const h = dom.remoteVideo.videoHeight;
-          dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
+          if (w && h) {
+            dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
+          }
+          safePlay();
         };
+
+        startTelemetryStats(pc);
       } else if (event.track.kind === 'audio') {
-        // Áudio do sistema ou microfone do host
-        const audioStream = event.streams[0] || new MediaStream([event.track]);
+        const audioStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
         dom.remoteAudio.srcObject = audioStream;
-        dom.remoteAudio.play().catch(e => console.log('Autoplay áudio bloqueado:', e));
+        dom.remoteAudio.play().catch(e => console.log('[Audio] Autoplay áudio:', e));
       }
     };
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Aplica candidatos ICE pendentes
+      // Aplica todos os candidatos ICE que chegaram antes da offer
       const pending = state.pendingCandidates.get(fromPeerId) || [];
       for (const candidate of pending) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
+        }
       }
       state.pendingCandidates.set(fromPeerId, []);
 
@@ -520,7 +604,7 @@
         answer: pc.localDescription.toJSON()
       });
 
-      console.log(`[P2P] Answer enviada para ${fromPeerId}`);
+      console.log(`[P2P] Answer enviada com sucesso para ${fromPeerId}`);
     } catch (err) {
       console.error('[P2P] Erro ao processar offer:', err);
     }
@@ -532,34 +616,43 @@
   async function handleIncomingAnswer(fromPeerId, answer) {
     const pc = state.peerConnections.get(fromPeerId);
     if (!pc) {
-      console.warn('[P2P] Nenhuma PeerConnection para', fromPeerId);
+      console.warn('[P2P] Nenhuma PeerConnection encontrada para answer de', fromPeerId);
+      return;
+    }
+
+    if (pc.signalingState !== 'have-local-offer') {
+      console.warn(`[P2P] Ignorando answer de ${fromPeerId}: estado de sinalização atual é "${pc.signalingState}"`);
       return;
     }
 
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-      // Aplica candidatos ICE pendentes
+      // Aplica candidatos ICE pendentes em buffer
       const pending = state.pendingCandidates.get(fromPeerId) || [];
       for (const candidate of pending) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
+        }
       }
       state.pendingCandidates.set(fromPeerId, []);
 
-      console.log(`[P2P] Conexão estabelecida com ${fromPeerId}`);
+      console.log(`[P2P] Conexão P2P estabelecida com espectador ${fromPeerId}`);
     } catch (err) {
       console.error('[P2P] Erro ao processar answer:', err);
     }
   }
 
   /**
-   * Processa ICE candidate recebido
+   * Processa ICE candidate recebido (armazena em buffer caso remoteDescription ainda não esteja pronta)
    */
   async function handleIncomingIceCandidate(fromPeerId, candidate) {
     const pc = state.peerConnections.get(fromPeerId);
 
-    if (!pc || !pc.remoteDescription) {
-      // Armazena para aplicar depois
+    // Se o PC ou remoteDescription ainda não estiverem prontos, armazena no buffer
+    if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
       if (!state.pendingCandidates.has(fromPeerId)) {
         state.pendingCandidates.set(fromPeerId, []);
       }
