@@ -1,6 +1,7 @@
 /**
  * PMESP STREAM - APLICAÇÃO DE COMPARTILHAMENTO DE TELA & INSTRUÇÃO WEBRTC
- * Arquitetura SFU mediasoup v3 com getDisplayMedia e sinalização WebSocket
+ * Arquitetura P2P: WebRTC nativo com RTCPeerConnection e sinalização WebSocket
+ * Sem dependência de mediasoup ou qualquer biblioteca SFU externa.
  */
 
 (function () {
@@ -28,17 +29,18 @@
     sessionStartTime: null,
     sessionTimerInterval: null,
 
-    // Mediasoup
-    device: null,
-    sendTransport: null,
-    recvTransport: null,
-    producers: new Map(), // mediaType -> producer
-    consumers: new Map(), // consumerId -> consumer
+    // WebRTC P2P
+    iceServers: [],
+    peerConnections: new Map(),  // peerId -> RTCPeerConnection
+    pendingCandidates: new Map(), // peerId -> [candidates] (antes de remoteDescription)
 
     // Streams Locais
     screenStream: null,
     webcamStream: null,
     micStream: null,
+
+    // Controle de transmissão
+    isBroadcasting: false,
 
     // Preferências de Transmissão
     preferences: {
@@ -50,7 +52,6 @@
 
     // Participantes e Mensagens Reais
     peers: new Map(), // peerId -> { id, displayName, role }
-    activeBroadcasterPeerId: null,
 
     // Telemetria
     statsInterval: null,
@@ -206,20 +207,20 @@
     state.ws.onopen = () => {
       console.log('[WS] Conectado ao servidor de sinalização');
       state.connected = true;
-      updateSfuIndicator('connected');
+      updateConnectionIndicator('connected');
       fetchRoomsList();
     };
 
     state.ws.onclose = () => {
       console.warn('[WS] Conexão encerrada. Tentando reconectar em 2s...');
       state.connected = false;
-      updateSfuIndicator('disconnected');
+      updateConnectionIndicator('disconnected');
       setTimeout(connectWebSocket, 2000);
     };
 
     state.ws.onerror = (err) => {
       console.error('[WS] Erro de socket:', err);
-      updateSfuIndicator('error');
+      updateConnectionIndicator('error');
     };
 
     state.ws.onmessage = async (event) => {
@@ -271,6 +272,12 @@
     });
   }
 
+  // Envio fire-and-forget (sem aguardar resposta) para ICE candidates
+  function sendSignal(type, data = {}) {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+    state.ws.send(JSON.stringify({ type, id: ++state.requestId, data }));
+  }
+
   // ========================================================================
   // PROCESSAMENTO DE NOTIFICAÇÕES DO SERVIDOR
   // ========================================================================
@@ -278,20 +285,57 @@
     const { event } = notification;
 
     switch (event) {
-      // Novo produtor na sala (compartilhamento iniciado por outro peer)
-      case 'newProducer': {
-        const { producer } = notification;
-        console.log('[SFU] Novo produtor na sala:', producer);
-        showToast(`Novo stream disponível: ${producer.appData?.mediaType || producer.kind}`, 'info');
-        await consumeRemoteProducer(producer);
+      // Host recebe pedido de stream de um novo espectador
+      case 'viewerRequestsStream': {
+        const { viewerPeerId } = notification;
+        console.log('[P2P] Espectador solicitou stream:', viewerPeerId);
+        if (state.isHost && state.isBroadcasting && state.screenStream) {
+          await createOfferForViewer(viewerPeerId);
+        }
         break;
       }
 
-      // Produtor fechado (compartilhamento encerrado)
-      case 'producerClosed': {
-        const { producerId } = notification;
-        console.log('[SFU] Produtor encerrado:', producerId);
-        handleProducerClosed(producerId);
+      // Espectador recebe offer do host
+      case 'rtcOffer': {
+        const { fromPeerId, offer } = notification;
+        console.log('[P2P] Recebeu offer de:', fromPeerId);
+        await handleIncomingOffer(fromPeerId, offer);
+        break;
+      }
+
+      // Host recebe answer do espectador
+      case 'rtcAnswer': {
+        const { fromPeerId, answer } = notification;
+        console.log('[P2P] Recebeu answer de:', fromPeerId);
+        await handleIncomingAnswer(fromPeerId, answer);
+        break;
+      }
+
+      // Candidato ICE de qualquer peer
+      case 'rtcIceCandidate': {
+        const { fromPeerId, candidate } = notification;
+        await handleIncomingIceCandidate(fromPeerId, candidate);
+        break;
+      }
+
+      // Notificação de que o host iniciou transmissão
+      case 'streamStarted': {
+        const { hostPeerId, streamInfo } = notification;
+        console.log('[P2P] Host iniciou transmissão:', hostPeerId);
+        showToast('Transmissão iniciada pelo instrutor.', 'ok');
+        // Espectador solicita o stream
+        if (!state.isHost) {
+          await sendRequest('requestStream');
+        }
+        break;
+      }
+
+      // Notificação de que o host encerrou transmissão
+      case 'streamStopped': {
+        console.log('[P2P] Host encerrou transmissão.');
+        showToast('Transmissão encerrada pelo instrutor.', 'info');
+        closeAllPeerConnections();
+        showWaitingState();
         break;
       }
 
@@ -301,6 +345,11 @@
         state.peers.set(peer.id, peer);
         renderPeerList();
         showToast(`${peer.displayName} ingressou na sala`, 'info');
+
+        // Se sou host e estou transmitindo, envio stream para o novo viewer
+        if (state.isHost && state.isBroadcasting && state.screenStream) {
+          setTimeout(() => createOfferForViewer(peer.id), 500);
+        }
         break;
       }
 
@@ -313,6 +362,13 @@
           renderPeerList();
           showToast(`${name} saiu da sala`, 'info');
         }
+        // Fecha a peer connection associada
+        closePeerConnection(peerId);
+
+        // Se o host saiu, volta ao estado de espera
+        if (peerId === state.creatorPeerId && !state.isHost) {
+          showWaitingState();
+        }
         break;
       }
 
@@ -322,99 +378,217 @@
         appendChatMessage(message);
         break;
       }
-
-      case 'consumerClosed': {
-        const { consumerId } = notification;
-        if (state.consumers.has(consumerId)) {
-          const consumer = state.consumers.get(consumerId);
-          consumer.close();
-          state.consumers.delete(consumerId);
-          checkActiveStreams();
-        }
-        break;
-      }
     }
   }
 
   // ========================================================================
-  // INICIALIZAÇÃO MEDIASOUP DEVICE & TRANSPORTS
+  // WEBRTC PEER-TO-PEER: GERENCIAMENTO DE CONEXÕES
   // ========================================================================
-  async function initMediasoupDevice(routerRtpCapabilities) {
-    if (!window.mediasoupClient) {
-      throw new Error('Biblioteca mediasoup-client não carregada.');
+
+  /**
+   * Cria uma RTCPeerConnection para um peer específico
+   */
+  function createPeerConnection(remotePeerId) {
+    // Fecha qualquer conexão existente com esse peer
+    closePeerConnection(remotePeerId);
+
+    const pc = new RTCPeerConnection({
+      iceServers: state.iceServers
+    });
+
+    state.peerConnections.set(remotePeerId, pc);
+    state.pendingCandidates.set(remotePeerId, []);
+
+    // Envia ICE candidates via sinalização
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendSignal('rtcIceCandidate', {
+          targetPeerId: remotePeerId,
+          candidate: event.candidate.toJSON()
+        });
+      }
+    };
+
+    // Log de estado da conexão
+    pc.onconnectionstatechange = () => {
+      console.log(`[P2P] Conexão com ${remotePeerId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'connected') {
+        updateConnectionIndicator('connected');
+      } else if (pc.connectionState === 'failed') {
+        updateConnectionIndicator('error');
+        showToast('Conexão P2P falhou. Tentando reconectar...', 'warn');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[P2P] ICE State com ${remotePeerId}: ${pc.iceConnectionState}`);
+    };
+
+    return pc;
+  }
+
+  /**
+   * HOST: Cria offer e envia stream para um espectador específico
+   */
+  async function createOfferForViewer(viewerPeerId) {
+    const pc = createPeerConnection(viewerPeerId);
+
+    // Adiciona todas as tracks do stream ativo
+    if (state.screenStream) {
+      state.screenStream.getTracks().forEach(track => {
+        pc.addTrack(track, state.screenStream);
+      });
     }
 
-    state.device = new window.mediasoupClient.Device();
-    await state.device.load({ routerRtpCapabilities });
-    console.log('[SFU] mediasoup Device carregado com RTP Capabilities com sucesso.');
+    // Se tem microfone ativo, adiciona também
+    if (state.micStream) {
+      state.micStream.getTracks().forEach(track => {
+        pc.addTrack(track, state.micStream);
+      });
+    }
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await sendRequest('rtcOffer', {
+        targetPeerId: viewerPeerId,
+        offer: pc.localDescription.toJSON()
+      });
+
+      console.log(`[P2P] Offer enviada para ${viewerPeerId}`);
+    } catch (err) {
+      console.error('[P2P] Erro ao criar offer:', err);
+    }
   }
 
-  async function createSendTransport() {
-    if (state.sendTransport) return state.sendTransport;
+  /**
+   * ESPECTADOR: Recebe offer do host, cria answer
+   */
+  async function handleIncomingOffer(fromPeerId, offer) {
+    const pc = createPeerConnection(fromPeerId);
 
-    const data = await sendRequest('createWebRtcTransport', { direction: 'send' });
-    const transport = state.device.createSendTransport(data);
+    // Configura handler para receber tracks remotas
+    pc.ontrack = (event) => {
+      console.log(`[P2P] Track recebida: ${event.track.kind} de ${fromPeerId}`);
 
-    transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      try {
-        await sendRequest('connectWebRtcTransport', {
-          transportId: transport.id,
-          dtlsParameters
-        });
-        callback();
-      } catch (err) {
-        errback(err);
+      if (event.track.kind === 'video') {
+        dom.remoteVideo.srcObject = event.streams[0] || new MediaStream([event.track]);
+        dom.placeholderStage.style.display = 'none';
+        dom.streamInfoBadge.style.display = 'flex';
+        dom.liveIndicator.className = 'badge-pulse';
+        dom.liveText.textContent = 'AO VIVO';
+
+        // Inicia telemetria com a peer connection
+        startTelemetryStats(pc);
+
+        // Atualiza info quando os metadados do vídeo carregam
+        dom.remoteVideo.onloadedmetadata = () => {
+          const w = dom.remoteVideo.videoWidth;
+          const h = dom.remoteVideo.videoHeight;
+          dom.streamInfoText.textContent = `Transmissão Ativa: ${w}×${h}`;
+        };
+      } else if (event.track.kind === 'audio') {
+        // Áudio do sistema ou microfone do host
+        const audioStream = event.streams[0] || new MediaStream([event.track]);
+        dom.remoteAudio.srcObject = audioStream;
+        dom.remoteAudio.play().catch(e => console.log('Autoplay áudio bloqueado:', e));
       }
-    });
+    };
 
-    transport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
-      try {
-        const { id } = await sendRequest('produce', {
-          transportId: transport.id,
-          kind,
-          rtpParameters,
-          appData
-        });
-        callback({ id });
-      } catch (err) {
-        errback(err);
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      // Aplica candidatos ICE pendentes
+      const pending = state.pendingCandidates.get(fromPeerId) || [];
+      for (const candidate of pending) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
-    });
+      state.pendingCandidates.set(fromPeerId, []);
 
-    transport.on('connectionstatechange', (s) => {
-      console.log(`[SendTransport] Estado: ${s}`);
-      updateSfuIndicator(s);
-    });
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-    state.sendTransport = transport;
-    return transport;
+      await sendRequest('rtcAnswer', {
+        targetPeerId: fromPeerId,
+        answer: pc.localDescription.toJSON()
+      });
+
+      console.log(`[P2P] Answer enviada para ${fromPeerId}`);
+    } catch (err) {
+      console.error('[P2P] Erro ao processar offer:', err);
+    }
   }
 
-  async function createRecvTransport() {
-    if (state.recvTransport) return state.recvTransport;
+  /**
+   * HOST: Recebe answer de um espectador
+   */
+  async function handleIncomingAnswer(fromPeerId, answer) {
+    const pc = state.peerConnections.get(fromPeerId);
+    if (!pc) {
+      console.warn('[P2P] Nenhuma PeerConnection para', fromPeerId);
+      return;
+    }
 
-    const data = await sendRequest('createWebRtcTransport', { direction: 'recv' });
-    const transport = state.device.createRecvTransport(data);
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-    transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      try {
-        await sendRequest('connectWebRtcTransport', {
-          transportId: transport.id,
-          dtlsParameters
-        });
-        callback();
-      } catch (err) {
-        errback(err);
+      // Aplica candidatos ICE pendentes
+      const pending = state.pendingCandidates.get(fromPeerId) || [];
+      for (const candidate of pending) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
       }
-    });
+      state.pendingCandidates.set(fromPeerId, []);
 
-    transport.on('connectionstatechange', (s) => {
-      console.log(`[RecvTransport] Estado: ${s}`);
-      updateSfuIndicator(s);
-    });
+      console.log(`[P2P] Conexão estabelecida com ${fromPeerId}`);
+    } catch (err) {
+      console.error('[P2P] Erro ao processar answer:', err);
+    }
+  }
 
-    state.recvTransport = transport;
-    return transport;
+  /**
+   * Processa ICE candidate recebido
+   */
+  async function handleIncomingIceCandidate(fromPeerId, candidate) {
+    const pc = state.peerConnections.get(fromPeerId);
+
+    if (!pc || !pc.remoteDescription) {
+      // Armazena para aplicar depois
+      if (!state.pendingCandidates.has(fromPeerId)) {
+        state.pendingCandidates.set(fromPeerId, []);
+      }
+      state.pendingCandidates.get(fromPeerId).push(candidate);
+      return;
+    }
+
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.warn('[P2P] Erro ao adicionar ICE candidate:', err);
+    }
+  }
+
+  /**
+   * Fecha uma peer connection específica
+   */
+  function closePeerConnection(peerId) {
+    const pc = state.peerConnections.get(peerId);
+    if (pc) {
+      pc.close();
+      state.peerConnections.delete(peerId);
+    }
+    state.pendingCandidates.delete(peerId);
+  }
+
+  /**
+   * Fecha todas as peer connections
+   */
+  function closeAllPeerConnections() {
+    for (const [peerId, pc] of state.peerConnections.entries()) {
+      pc.close();
+    }
+    state.peerConnections.clear();
+    state.pendingCandidates.clear();
   }
 
   // ========================================================================
@@ -468,11 +642,12 @@
       console.log('[ScreenShare] Solicitando getDisplayMedia com constraints:', displayConstraints);
       const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints);
       state.screenStream = stream;
+      state.isBroadcasting = true;
 
       const videoTrack = stream.getVideoTracks()[0];
       const audioTracks = stream.getAudioTracks();
 
-      // Ajusta contentHint para otimizar codificador (motion para jogos/vídeos ou detail para texto)
+      // Ajusta contentHint para otimizar codificador
       if (videoTrack) {
         videoTrack.contentHint = isMotion ? 'motion' : 'detail';
         console.log(`[ScreenShare] contentHint definido como: "${videoTrack.contentHint}"`);
@@ -492,51 +667,9 @@
         showToast('Áudio do sistema capturado com sucesso.', 'ok');
       }
 
-      // Cria transporte de envio mediasoup
-      const transport = await createSendTransport();
-
-      // Encodings com bitrate adaptativo para estabilidade
-      const encodings = [
-        {
-          maxBitrate: isMotion ? 4500000 : 2500000,
-          scaleResolutionDownBy: 1,
-          maxFramerate: targetFps
-        }
-      ];
-
-      // Produz a faixa de vídeo no SFU
-      const videoProducer = await transport.produce({
-        track: videoTrack,
-        encodings,
-        codecOptions: {
-          videoGoogleStartBitrate: 2000
-        },
-        appData: {
-          mediaType: 'screen-video',
-          resolution: `${widthTarget}p`,
-          fps: targetFps,
-          mode: isMotion ? 'motion' : 'detail'
-        }
-      });
-      state.producers.set('screen-video', videoProducer);
-
-      // Produz o áudio do sistema se disponível
-      if (audioTracks.length > 0) {
-        const audioProducer = await transport.produce({
-          track: audioTracks[0],
-          codecOptions: {
-            opusStereo: true,
-            opusDtx: true
-          },
-          appData: { mediaType: 'screen-audio' }
-        });
-        state.producers.set('screen-audio', audioProducer);
-      }
-
-      // Atualiza interface do apresentador
-      state.role = 'broadcaster';
+      // Mostra preview local (mutado para evitar eco)
       dom.remoteVideo.srcObject = stream;
-      dom.remoteVideo.muted = true; // muta no host para evitar microfonia/eco local
+      dom.remoteVideo.muted = true;
       dom.placeholderStage.style.display = 'none';
       dom.streamInfoBadge.style.display = 'flex';
       dom.streamInfoText.textContent = `Você está transmitindo: ${widthTarget}p @ ${targetFps} FPS (${isMotion ? 'Fluidez' : 'Nitidez'})`;
@@ -546,8 +679,30 @@
       dom.liveIndicator.className = 'badge-pulse';
       dom.liveText.textContent = 'AO VIVO';
 
-      showToast('Transmissão de tela iniciada com sucesso via SFU.', 'ok');
-      startTelemetryStats(videoProducer);
+      // Notifica o servidor que a transmissão começou
+      await sendRequest('streamStarted', {
+        streamInfo: {
+          resolution: `${widthTarget}p`,
+          fps: targetFps,
+          mode: isMotion ? 'motion' : 'detail'
+        }
+      });
+
+      // Envia stream para todos os espectadores já conectados
+      for (const [peerId, peer] of state.peers.entries()) {
+        if (peerId !== state.peerId && peer.role !== 'host') {
+          await createOfferForViewer(peerId);
+        }
+      }
+
+      showToast('Transmissão de tela iniciada via WebRTC P2P.', 'ok');
+
+      // Inicia telemetria com a primeira peer connection disponível
+      if (state.peerConnections.size > 0) {
+        const firstPc = state.peerConnections.values().next().value;
+        startTelemetryStats(firstPc);
+      }
+
       renderPeerList();
 
     } catch (err) {
@@ -566,18 +721,16 @@
       state.screenStream = null;
     }
 
-    const videoProd = state.producers.get('screen-video');
-    if (videoProd) {
-      await sendRequest('closeProducer', { producerId: videoProd.id });
-      videoProd.close();
-      state.producers.delete('screen-video');
-    }
+    state.isBroadcasting = false;
 
-    const audioProd = state.producers.get('screen-audio');
-    if (audioProd) {
-      await sendRequest('closeProducer', { producerId: audioProd.id });
-      audioProd.close();
-      state.producers.delete('screen-audio');
+    // Fecha todas as peer connections com espectadores
+    closeAllPeerConnections();
+
+    // Notifica o servidor
+    try {
+      await sendRequest('streamStopped');
+    } catch (e) {
+      console.warn('[ScreenShare] Erro ao notificar server:', e);
     }
 
     // Restaura interface
@@ -586,104 +739,18 @@
     dom.btnCtrlScreen.classList.remove('active');
     dom.labelCtrlScreen.textContent = 'Transmitir';
 
-    checkActiveStreams();
+    showWaitingState();
     renderPeerList();
   }
 
-  // ========================================================================
-  // CONSUMO DE STREAMS REMOTOS (ESPECTADORES)
-  // ========================================================================
-  async function consumeRemoteProducer(producer) {
-    try {
-      if (!state.device) {
-        console.warn('[SFU] Dispositivo ainda não pronto para consumir.');
-        return;
-      }
-
-      // Não consome se for o próprio stream enviado localmente
-      if (producer.peerId === state.peerId) {
-        return;
-      }
-
-      const transport = await createRecvTransport();
-
-      const response = await sendRequest('consume', {
-        producerId: producer.id,
-        rtpCapabilities: state.device.rtpCapabilities
-      });
-
-      const { id, kind, rtpParameters, appData } = response;
-
-      const consumer = await transport.consume({
-        id,
-        producerId: producer.id,
-        kind,
-        rtpParameters,
-        appData
-      });
-
-      state.consumers.set(consumer.id, consumer);
-
-      // Ativa o consumer no servidor
-      await sendRequest('resumeConsumer', { consumerId: consumer.id });
-
-      const stream = new MediaStream([consumer.track]);
-
-      if (kind === 'video') {
-        dom.remoteVideo.srcObject = stream;
-        dom.remoteVideo.muted = false;
-        dom.placeholderStage.style.display = 'none';
-        dom.streamInfoBadge.style.display = 'flex';
-        
-        const res = appData?.resolution || 'HD';
-        const fps = appData?.fps ? `${appData.fps} FPS` : '60 FPS';
-        dom.streamInfoText.textContent = `Transmissão Ativa: ${res} @ ${fps}`;
-        
-        dom.liveIndicator.className = 'badge-pulse';
-        dom.liveText.textContent = 'AO VIVO';
-
-        startTelemetryStats(consumer);
-      } else if (kind === 'audio') {
-        dom.remoteAudio.srcObject = stream;
-        dom.remoteAudio.play().catch(e => console.log('Autoplay áudio bloqueado até interação:', e));
-      }
-
-      console.log(`[SFU] Consumindo producer ${producer.id} [${kind}] com sucesso.`);
-    } catch (err) {
-      console.error('[SFU] Erro ao consumir stream remoto:', err);
-    }
-  }
-
-  function handleProducerClosed(producerId) {
-    for (const [cId, consumer] of state.consumers.entries()) {
-      if (consumer.producerId === producerId) {
-        consumer.close();
-        state.consumers.delete(cId);
-        break;
-      }
-    }
-    checkActiveStreams();
-  }
-
-  function checkActiveStreams() {
-    let hasRemoteVideo = false;
-    for (const consumer of state.consumers.values()) {
-      if (consumer.kind === 'video') {
-        hasRemoteVideo = true;
-        break;
-      }
-    }
-
-    const hasLocalScreen = state.producers.has('screen-video');
-
-    if (!hasRemoteVideo && !hasLocalScreen) {
-      dom.remoteVideo.srcObject = null;
-      dom.placeholderStage.style.display = 'flex';
-      dom.streamInfoBadge.style.display = 'none';
-      dom.liveIndicator.className = 'badge-tag badge-idle';
-      dom.liveText.textContent = 'EM ESPERA';
-      stopTelemetryStats();
-    }
+  function showWaitingState() {
+    dom.remoteVideo.srcObject = null;
+    dom.remoteAudio.srcObject = null;
+    dom.placeholderStage.style.display = 'flex';
+    dom.streamInfoBadge.style.display = 'none';
+    dom.liveIndicator.className = 'badge-tag badge-idle';
+    dom.liveText.textContent = 'EM ESPERA';
+    stopTelemetryStats();
   }
 
   // ========================================================================
@@ -753,6 +820,15 @@
         dom.iconCtrlMic.textContent = 'mic';
         dom.labelCtrlMic.textContent = 'Voz On';
         showToast('Microfone ativado.', 'ok');
+
+        // Se estiver transmitindo, adiciona mic às conexões existentes
+        if (state.isBroadcasting) {
+          for (const [peerId, pc] of state.peerConnections.entries()) {
+            stream.getTracks().forEach(track => {
+              pc.addTrack(track, stream);
+            });
+          }
+        }
       }
     } catch (err) {
       showToast(`Não foi possível acessar o microfone: ${err.message}`, 'error');
@@ -762,16 +838,27 @@
   // ========================================================================
   // TELEMETRIA E DIAGNÓSTICO WEBRTC EM TEMPO REAL (getStats)
   // ========================================================================
-  function startTelemetryStats(entity) {
+  function startTelemetryStats(pcOrEntity) {
     stopTelemetryStats();
     state.lastBytes = 0;
     state.lastStatsTimestamp = 0;
 
     state.statsInterval = setInterval(async () => {
       try {
-        if (!entity || entity.closed) return;
+        // Pega a primeira PeerConnection ativa para telemetria
+        let pc = pcOrEntity;
+        if (!pc || pc.connectionState === 'closed') {
+          // Tenta pegar qualquer PC ativa
+          for (const activePc of state.peerConnections.values()) {
+            if (activePc.connectionState !== 'closed') {
+              pc = activePc;
+              break;
+            }
+          }
+        }
+        if (!pc || pc.connectionState === 'closed') return;
 
-        const stats = await entity.getStats();
+        const stats = await pc.getStats();
         let fps = 0;
         let width = 0;
         let height = 0;
@@ -780,7 +867,7 @@
         let jitter = 0;
         let packetsLost = 0;
         let totalPackets = 0;
-        let codec = 'H.264 / VP8 (Hardware)';
+        let codec = 'VP8 / H.264';
         let transportType = 'UDP';
 
         stats.forEach((report) => {
@@ -838,7 +925,7 @@
 
         // Atualiza DOM da aba de métricas
         if (fps > 0) dom.statFps.textContent = `${fps} FPS`;
-        else if (width > 0) dom.statFps.textContent = '60 FPS';
+        else if (width > 0) dom.statFps.textContent = '-- FPS';
 
         if (width > 0 && height > 0) {
           dom.statRes.textContent = `${width} × ${height}`;
@@ -852,7 +939,7 @@
 
         if (rtt > 0) {
           dom.statRtt.textContent = `${rtt} ms`;
-          dom.statRttStatus.textContent = rtt < 40 ? 'Excelente (Localhost)' : 'Estável';
+          dom.statRttStatus.textContent = rtt < 40 ? 'Excelente' : rtt < 100 ? 'Estável' : 'Alta Latência';
         } else {
           dom.statRtt.textContent = '< 5 ms';
           dom.statRttStatus.textContent = 'Localhost (Zero Jitter)';
@@ -899,7 +986,7 @@
     dom.peerList.innerHTML = '';
 
     // Participante local
-    const isTransmitting = state.producers.has('screen-video');
+    const isTransmitting = state.isBroadcasting;
     const myInitials = state.displayName.substring(0, 2).toUpperCase();
 
     const localItem = document.createElement('div');
@@ -1101,12 +1188,10 @@
       state.isHost = !!response.isHost;
       state.role = response.role || (state.isHost ? 'host' : 'spectator');
       state.creatorPeerId = response.creatorPeerId;
+      state.iceServers = response.iceServers || [];
 
       // Aplica regras de permissão da interface
       applyRolePermissions();
-
-      // Inicializa dispositivo mediasoup
-      await initMediasoupDevice(response.routerRtpCapabilities);
 
       // Atualiza lista de participantes reais
       state.peers.clear();
@@ -1114,11 +1199,11 @@
         response.peers.forEach(p => state.peers.set(p.id, p));
       }
 
-      // Se houver produtores ativos, consome imediatamente
-      if (response.producers && response.producers.length > 0) {
-        for (const prod of response.producers) {
-          await consumeRemoteProducer(prod);
-        }
+      // Se já há stream ativo e sou espectador, solicita stream do host
+      if (response.hasActiveStream && !state.isHost) {
+        setTimeout(async () => {
+          await sendRequest('requestStream');
+        }, 500);
       }
 
       // Atualiza URL sem recarregar para facilitar compartilhamento de link local
@@ -1144,7 +1229,7 @@
 
   async function leaveRoom() {
     try {
-      if (state.screenStream) {
+      if (state.isBroadcasting) {
         await stopScreenSharing();
       }
       if (state.webcamStream) {
@@ -1156,21 +1241,14 @@
         state.micStream = null;
       }
 
+      closeAllPeerConnections();
+
       await sendRequest('leave');
 
       // Limpa estado local
       state.currentRoomId = null;
       state.peers.clear();
-      state.producers.clear();
-      state.consumers.clear();
-      if (state.sendTransport) {
-        state.sendTransport.close();
-        state.sendTransport = null;
-      }
-      if (state.recvTransport) {
-        state.recvTransport.close();
-        state.recvTransport = null;
-      }
+      state.isBroadcasting = false;
 
       stopSessionTimer();
       stopTelemetryStats();
@@ -1206,7 +1284,7 @@
         dom.roomsListContainer.innerHTML = `
           <div class="empty-state">
             <span class="material-symbols-outlined" style="font-size: 36px; margin-bottom: 8px; display: block; color: var(--tertiary-container);">meeting_room</span>
-            Nenhuma sala ativa no momento no servidor local.<br>Crie uma sala acima para iniciar a transmissão.
+            Nenhuma sala ativa no momento no servidor.<br>Crie uma sala acima para iniciar a transmissão.
           </div>
         `;
         return;
@@ -1254,19 +1332,19 @@
   // ========================================================================
   // UTILITÁRIOS E UI
   // ========================================================================
-  function updateSfuIndicator(status) {
+  function updateConnectionIndicator(status) {
     if (status === 'connected') {
       dom.sfuStatusIcon.textContent = 'check_circle';
       dom.sfuStatusIcon.style.color = 'var(--status-ok)';
-      dom.sfuStatusText.textContent = 'SFU Conectado';
+      dom.sfuStatusText.textContent = 'P2P Conectado';
     } else if (status === 'connecting') {
       dom.sfuStatusIcon.textContent = 'sync';
       dom.sfuStatusIcon.style.color = 'var(--status-warn)';
-      dom.sfuStatusText.textContent = 'Sincronizando...';
+      dom.sfuStatusText.textContent = 'Conectando...';
     } else {
       dom.sfuStatusIcon.textContent = 'error';
       dom.sfuStatusIcon.style.color = 'var(--status-error)';
-      dom.sfuStatusText.textContent = 'SFU Oscilando';
+      dom.sfuStatusText.textContent = 'Desconectado';
     }
   }
 
@@ -1305,7 +1383,7 @@
 
     // Controles Inferiores
     dom.btnCtrlScreen.addEventListener('click', () => {
-      if (state.producers.has('screen-video')) {
+      if (state.isBroadcasting) {
         stopScreenSharing();
       } else {
         dom.modalSettings.classList.add('active');
@@ -1393,7 +1471,7 @@
       dom.modalSettings.classList.remove('active');
 
       // Se ainda não estiver compartilhando tela, inicia
-      if (!state.producers.has('screen-video')) {
+      if (!state.isBroadcasting) {
         await startScreenSharing();
       } else {
         showToast('Parâmetros salvos para a próxima transmissão.', 'ok');
