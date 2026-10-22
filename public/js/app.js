@@ -41,13 +41,8 @@
 
     // WebRTC P2P
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:stun.services.mozilla.com' },
-      { urls: 'stun:stun.cloudflare.com:3478' }
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+      { urls: ['stun:stun.cloudflare.com:3478'] }
     ],
     peerConnections: new Map(),  // peerId -> RTCPeerConnection
     pendingCandidates: new Map(), // peerId -> [candidates] (antes de remoteDescription)
@@ -366,12 +361,16 @@
     const { event } = notification;
 
     switch (event) {
-      // Host recebe pedido de stream de um novo espectador (ou espectador reconectado)
+      // Host recebe pedido de stream de um espectador
       case 'viewerRequestsStream': {
         const { viewerPeerId } = notification;
         console.log('[P2P] Espectador solicitou stream:', viewerPeerId);
         if (state.isHost && state.isBroadcasting && state.screenStream) {
-          closePeerConnection(viewerPeerId);
+          const existingPc = state.peerConnections.get(viewerPeerId);
+          if (existingPc && (existingPc.connectionState === 'connected' || existingPc.signalingState === 'have-local-offer' || existingPc.connectionState === 'connecting')) {
+            console.log(`[P2P] Conexão com ${viewerPeerId} já em andamento (${existingPc.signalingState} / ${existingPc.connectionState}).`);
+            return;
+          }
           await createOfferForViewer(viewerPeerId, true);
         }
         break;
@@ -407,11 +406,20 @@
         if (hostPeerId) {
           state.creatorPeerId = hostPeerId;
         }
-        showToast('Transmissão iniciada pelo instrutor.', 'ok');
-        // Espectador solicita o stream limpando conexões anteriores
+        showToast('Transmissão iniciada pelo instrutor. Conectando...', 'info', 3000);
+        updateConnectionIndicator('connecting');
+
+        // O host já dispara ofertas diretamente para todos os espectadores.
+        // Aguarda a oferta chegar sem colidir; aciona fallback apenas após 3.5s se necessário.
         if (!state.isHost) {
-          closeAllPeerConnections();
-          await sendRequest('requestStream');
+          clearTimeout(state.requestStreamTimeout);
+          state.requestStreamTimeout = setTimeout(() => {
+            const pc = state.peerConnections.get(state.creatorPeerId);
+            if (!pc || (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting')) {
+              console.log('[P2P] Fallback: solicitando stream após timeout de espera...');
+              sendRequest('requestStream').catch(() => {});
+            }
+          }, 3500);
         }
         break;
       }
@@ -420,6 +428,7 @@
       case 'streamStopped': {
         console.log('[P2P] Host encerrou transmissão.');
         showToast('Transmissão encerrada pelo instrutor.', 'info');
+        clearTimeout(state.requestStreamTimeout);
         closeAllPeerConnections();
         showWaitingState();
         break;
@@ -437,12 +446,11 @@
         renderPeerList();
         showToast(`${peer.displayName} está na sala`, 'info');
 
-        // Se sou host e estou transmitindo, recria offer para o viewer reconectado
+        // Se sou host e estou transmitindo, envia offer para o espectador que entrou
         if (state.isHost && state.isBroadcasting && state.screenStream && peer.role !== 'host') {
-          closePeerConnection(peer.id);
           setTimeout(() => {
-            createOfferForViewer(peer.id, true);
-          }, 500);
+            createOfferForViewer(peer.id, false);
+          }, 400);
         }
         break;
       }
@@ -500,15 +508,9 @@
 
     const iceConfig = {
       iceServers: (state.iceServers && state.iceServers.length > 0) ? state.iceServers : [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com' },
-        { urls: 'stun:stun.cloudflare.com:3478' }
-      ],
-      iceCandidatePoolSize: 2
+        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+        { urls: ['stun:stun.cloudflare.com:3478'] }
+      ]
     };
 
     const pc = new RTCPeerConnection(iceConfig);
@@ -532,34 +534,44 @@
 
     // Monitoramento de estado de conexão
     pc.onconnectionstatechange = () => {
+      if (state.peerConnections.get(remotePeerId) !== pc) return;
       console.log(`[P2P] Conexão com ${remotePeerId}: ${pc.connectionState}`);
+
       if (pc.connectionState === 'connected') {
         updateConnectionIndicator('connected');
-        // Garante que o vídeo toque ao conectar
         if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
           dom.remoteVideo.play().catch(e => console.log('[Video] Play na conexão:', e));
         }
+      } else if (pc.connectionState === 'connecting') {
+        updateConnectionIndicator('connecting');
       } else if (pc.connectionState === 'failed') {
-        updateConnectionIndicator('error');
-        console.warn(`[P2P] Conexão falhou com ${remotePeerId}. Tentando auto-recuperação...`);
-        // Se for espectador e a conexão falhou, tenta solicitar novo stream após 1s
+        console.warn(`[P2P] Conexão falhou com ${remotePeerId}.`);
         if (!state.isHost) {
+          updateConnectionIndicator('connecting');
           setTimeout(() => {
             if (!state.isHost && state.currentRoomId) {
-              sendRequest('requestStream').catch(() => {});
+              const currentPc = state.peerConnections.get(remotePeerId);
+              if (!currentPc || currentPc.connectionState !== 'connected') {
+                console.log('[P2P] Tentando restabelecer stream com o instrutor...');
+                sendRequest('requestStream').catch(() => {});
+              }
             }
-          }, 1000);
+          }, 2000);
         }
       }
     };
 
     pc.oniceconnectionstatechange = () => {
+      if (state.peerConnections.get(remotePeerId) !== pc) return;
       console.log(`[P2P] ICE State com ${remotePeerId}: ${pc.iceConnectionState}`);
+
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         updateConnectionIndicator('connected');
         if (dom.remoteVideo.paused && dom.remoteVideo.srcObject) {
           dom.remoteVideo.play().catch(() => {});
         }
+      } else if (pc.iceConnectionState === 'checking') {
+        updateConnectionIndicator('connecting');
       } else if (pc.iceConnectionState === 'failed') {
         console.warn(`[P2P] ICE falhou com ${remotePeerId}.`);
         if (state.isHost) {
@@ -622,6 +634,9 @@
    */
   async function handleIncomingOffer(fromPeerId, offer) {
     console.log(`[P2P] Processando offer de ${fromPeerId}...`);
+    clearTimeout(state.requestStreamTimeout);
+    updateConnectionIndicator('connecting');
+
     const pc = createPeerConnection(fromPeerId);
 
     // Configura recepção de tracks remotas
@@ -640,6 +655,7 @@
               dom.streamInfoBadge.style.display = 'flex';
               dom.liveIndicator.className = 'badge-pulse';
               dom.liveText.textContent = 'AO VIVO';
+              updateConnectionIndicator('connected');
             })
             .catch(err => {
               console.warn('[Video] Play automático bloqueado pelo navegador:', err);
@@ -704,17 +720,6 @@
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-      // Aplica todos os candidatos ICE que chegaram antes da offer
-      const pending = state.pendingCandidates.get(fromPeerId) || [];
-      for (const candidate of pending) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-          console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
-        }
-      }
-      state.pendingCandidates.set(fromPeerId, []);
-
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -724,6 +729,17 @@
       });
 
       console.log(`[P2P] Answer enviada com sucesso para ${fromPeerId}`);
+
+      // Aplica todos os candidatos ICE que chegaram antes ou durante a criação da answer
+      const pending = state.pendingCandidates.get(fromPeerId) || [];
+      for (const candidate of pending) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[P2P] Erro ao aplicar candidato ICE em buffer:', e);
+        }
+      }
+      state.pendingCandidates.set(fromPeerId, []);
     } catch (err) {
       console.error('[P2P] Erro ao processar offer:', err);
     }
