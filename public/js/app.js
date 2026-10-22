@@ -1799,15 +1799,20 @@
 
     // Senha de 4 dígitos - Toggle no card de criação
     if (dom.createRequirePassword) {
-      dom.createRequirePassword.addEventListener('change', () => {
-        if (dom.createRequirePassword.checked) {
-          if (dom.createPasswordGroup) dom.createPasswordGroup.style.display = 'block';
-          if (dom.createPassword) dom.createPassword.focus();
-        } else {
-          if (dom.createPasswordGroup) dom.createPasswordGroup.style.display = 'none';
-          if (dom.createPassword) dom.createPassword.value = '';
+      const syncPasswordVisibility = () => {
+        if (dom.createPasswordGroup) {
+          dom.createPasswordGroup.style.display = dom.createRequirePassword.checked ? 'block' : 'none';
         }
-      });
+        if (dom.createRequirePassword.checked && dom.createPassword) {
+          dom.createPassword.focus();
+        } else if (!dom.createRequirePassword.checked && dom.createPassword) {
+          dom.createPassword.value = '';
+        }
+      };
+
+      dom.createRequirePassword.addEventListener('change', syncPasswordVisibility);
+      dom.createRequirePassword.addEventListener('click', syncPasswordVisibility);
+      syncPasswordVisibility();
     }
 
     if (dom.createPassword) {
