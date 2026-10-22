@@ -1439,13 +1439,17 @@
   }
 
   async function joinExistingRoom() {
-    const code = dom.inputJoinCode.value.trim().toUpperCase();
-    const username = dom.inputJoinUsername.value.trim() || 'Operador Local';
+    let code = (dom.inputJoinCode && dom.inputJoinCode.value) ? dom.inputJoinCode.value.trim().toUpperCase() : '';
+    if (!code) {
+      code = getRoomFromUrl() || '';
+    }
+
+    const username = (dom.inputJoinUsername && dom.inputJoinUsername.value) ? dom.inputJoinUsername.value.trim() : 'Operador Local';
     const pin = (dom.joinPassword && dom.joinPassword.value) ? dom.joinPassword.value.trim() : null;
 
     if (!code) {
       showToast('Por favor, informe o código da sala.', 'warn');
-      dom.inputJoinCode.focus();
+      if (dom.inputJoinCode) dom.inputJoinCode.focus();
       return;
     }
 
@@ -1469,12 +1473,13 @@
       return;
     }
 
-    const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.currentRoomId)}`;
+    const base = window.location.origin;
+    const inviteUrl = `${base}/?room=${encodeURIComponent(state.currentRoomId)}`;
 
     const onCopied = () => {
       if (dom.copyText) dom.copyText.textContent = 'Link Copiado! ✓';
       if (dom.copyTextSidebar) dom.copyTextSidebar.textContent = 'Link Copiado! ✓';
-      showToast('Link da sala copiado! Envie este link aos alunos para que entrem diretamente.', 'ok', 5000);
+      showToast(`Link copiado com sucesso: ${inviteUrl}`, 'ok', 6000);
 
       setTimeout(() => {
         if (dom.copyText) dom.copyText.textContent = 'Copiar Link da Sala';

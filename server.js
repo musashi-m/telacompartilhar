@@ -150,16 +150,17 @@ wss.on('connection', (ws) => {
         // Entrar ou criar sala
         case 'join': {
           const { roomId, peerId, displayName, isCreating, topic, password } = data;
-          currentRoomId = roomId;
+          const cleanRoomId = String(roomId || '').trim().toUpperCase();
+          currentRoomId = cleanRoomId;
           currentPeerId = peerId;
 
-          const isRoomNew = !rooms.has(roomId);
+          const isRoomNew = !rooms.has(cleanRoomId);
           let room;
 
           if (isRoomNew) {
             const cleanPin = (password && String(password).trim().length === 4) ? String(password).trim() : null;
             room = {
-              id: roomId,
+              id: cleanRoomId,
               topic: topic || 'Instrução Operacional',
               createdAt: Date.now(),
               creatorPeerId: peerId,
@@ -167,10 +168,10 @@ wss.on('connection', (ws) => {
               peers: new Map(),
               hasActiveStream: false
             };
-            rooms.set(roomId, room);
-            console.log(`[Sala ${roomId}] Nova sala criada por "${displayName}" (${peerId})${room.password ? ' [PROTEGIDA POR SENHA]' : ''}`);
+            rooms.set(cleanRoomId, room);
+            console.log(`[Sala ${cleanRoomId}] Nova sala criada por "${displayName}" (${peerId})${room.password ? ' [PROTEGIDA POR SENHA]' : ''}`);
           } else {
-            room = rooms.get(roomId);
+            room = rooms.get(cleanRoomId);
 
             // Validação de Senha (se a sala for protegida e quem está entrando não for o criador original)
             if (room.password && room.creatorPeerId !== peerId) {
