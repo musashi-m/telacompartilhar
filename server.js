@@ -31,6 +31,12 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Fallback para SPA: qualquer requisição GET não-API entrega index.html
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 /**
  * Broadcast para peers da mesma sala (exceto o remetente opcional)
  */

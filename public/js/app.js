@@ -82,12 +82,18 @@
     roomsListContainer: document.getElementById('rooms-list-container'),
     activeRoomsCount: document.getElementById('active-rooms-count'),
     btnRefreshRooms: document.getElementById('btn-refresh-rooms'),
+    inviteBanner: document.getElementById('invite-banner'),
+    inviteRoomCode: document.getElementById('invite-room-code'),
+    joinCodeBadge: document.getElementById('join-code-badge'),
+    cardJoinRoom: document.getElementById('card-join-room'),
 
     // Sala Sub-header
     sessionRoomTopic: document.getElementById('session-room-topic'),
     sessionRoomId: document.getElementById('session-room-id'),
     btnCopyLink: document.getElementById('btn-copy-link'),
     copyText: document.getElementById('copy-text'),
+    btnCopyInviteSidebar: document.getElementById('btn-copy-invite-sidebar'),
+    copyTextSidebar: document.getElementById('copy-text-sidebar'),
     sessionTimer: document.getElementById('session-timer'),
     liveIndicator: document.getElementById('live-indicator'),
     liveText: document.getElementById('live-text'),
@@ -1142,6 +1148,10 @@
     const topic = dom.inputCreateTopic.value.trim() || 'Instrução Operacional';
     const username = dom.inputCreateUsername.value.trim() || 'Operador Local';
 
+    try {
+      localStorage.setItem('pmesp_user_name', username);
+    } catch (e) {}
+
     // Gera código institucional estilo PMESP-XXX-X
     const randomNum = Math.floor(100 + Math.random() * 900);
     const letters = ['A', 'B', 'C', 'D', 'X'];
@@ -1161,14 +1171,66 @@
 
     if (!code) {
       showToast('Por favor, informe o código da sala.', 'warn');
+      dom.inputJoinCode.focus();
       return;
     }
+
+    try {
+      localStorage.setItem('pmesp_user_name', username);
+    } catch (e) {}
 
     state.displayName = username;
     dom.headerUserDisplay.textContent = username;
     dom.headerUserAvatar.textContent = username.substring(0, 2).toUpperCase();
 
     await joinRoom(code, 'Instrução em Andamento', false);
+  }
+
+  // ========================================================================
+  // COMPARTILHAMENTO DE LINK DA SALA
+  // ========================================================================
+  function copyInviteLink() {
+    if (!state.currentRoomId) {
+      showToast('Nenhuma sala ativa para compartilhar.', 'warn');
+      return;
+    }
+
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(state.currentRoomId)}`;
+
+    const onCopied = () => {
+      if (dom.copyText) dom.copyText.textContent = 'Link Copiado! ✓';
+      if (dom.copyTextSidebar) dom.copyTextSidebar.textContent = 'Link Copiado! ✓';
+      showToast('Link da sala copiado! Envie este link aos alunos para que entrem diretamente.', 'ok', 5000);
+
+      setTimeout(() => {
+        if (dom.copyText) dom.copyText.textContent = 'Copiar Link da Sala';
+        if (dom.copyTextSidebar) dom.copyTextSidebar.textContent = 'Compartilhar Link da Sala';
+      }, 3000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inviteUrl)
+        .then(onCopied)
+        .catch(() => fallbackCopy(inviteUrl, onCopied));
+    } else {
+      fallbackCopy(inviteUrl, onCopied);
+    }
+  }
+
+  function fallbackCopy(text, callback) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      callback();
+    } catch (e) {
+      window.prompt('Copie o link abaixo para compartilhar com os participantes:', text);
+    }
+    document.body.removeChild(ta);
   }
 
   async function joinRoom(roomId, topic, isCreating = false) {
@@ -1206,8 +1268,8 @@
         }, 500);
       }
 
-      // Atualiza URL sem recarregar para facilitar compartilhamento de link local
-      const newUrl = `${location.pathname}?room=${roomId}`;
+      // Atualiza URL no navegador para conter ?room=PMESP-XXX-X
+      const newUrl = `${location.pathname}?room=${encodeURIComponent(roomId)}`;
       window.history.pushState({ roomId }, '', newUrl);
 
       // Transição de tela
@@ -1219,7 +1281,12 @@
 
       startSessionTimer();
       renderPeerList();
-      showToast(state.isHost ? `Sala criada! Você é o instrutor da sessão.` : `Você ingressou como espectador.`, 'ok');
+
+      if (state.isHost) {
+        showToast(`Sala criada com sucesso! Use o botão "Copiar Link da Sala" acima para convidar os alunos.`, 'ok', 6000);
+      } else {
+        showToast(`Você ingressou na sala como espectador.`, 'ok');
+      }
 
     } catch (err) {
       console.error('[Join] Erro ao ingressar na sala:', err);
@@ -1367,13 +1434,39 @@
     dom.btnJoinRoom.addEventListener('click', joinExistingRoom);
     dom.btnRefreshRooms.addEventListener('click', fetchRoomsList);
 
-    // Copiar Código da Sala
-    dom.btnCopyLink.addEventListener('click', () => {
-      const text = state.currentRoomId;
-      navigator.clipboard.writeText(text).then(() => {
-        dom.copyText.textContent = 'Copiado!';
-        setTimeout(() => dom.copyText.textContent = 'Copiar Código', 2000);
-      });
+    // Botões de Compartilhar Link
+    if (dom.btnCopyLink) dom.btnCopyLink.addEventListener('click', copyInviteLink);
+    if (dom.btnCopyInviteSidebar) dom.btnCopyInviteSidebar.addEventListener('click', copyInviteLink);
+
+    // Atalhos de Teclado (Enter para entrar ou criar sala rapidamente)
+    dom.inputJoinUsername.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        joinExistingRoom();
+      }
+    });
+
+    dom.inputJoinCode.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        dom.inputJoinUsername.focus();
+        dom.inputJoinUsername.select();
+      }
+    });
+
+    dom.inputCreateUsername.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        createAndJoinRoom();
+      }
+    });
+
+    dom.inputCreateTopic.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        dom.inputCreateUsername.focus();
+        dom.inputCreateUsername.select();
+      }
     });
 
     // Iniciar Compartilhamento pelo Stage
@@ -1489,7 +1582,47 @@
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     if (roomParam) {
-      dom.inputJoinCode.value = roomParam;
+      const cleanRoom = roomParam.trim().toUpperCase();
+      dom.inputJoinCode.value = cleanRoom;
+      dom.inputJoinCode.readOnly = true;
+      dom.inputJoinCode.style.opacity = '0.9';
+      dom.inputJoinCode.style.backgroundColor = 'var(--surface-container-high)';
+
+      if (dom.inviteBanner) dom.inviteBanner.style.display = 'flex';
+      if (dom.inviteRoomCode) dom.inviteRoomCode.textContent = cleanRoom;
+      if (dom.joinCodeBadge) dom.joinCodeBadge.style.display = 'inline-block';
+      if (dom.cardJoinRoom) dom.cardJoinRoom.classList.add('card-highlight');
+
+      // Tenta recuperar o último nome utilizado pelo aluno
+      const savedName = localStorage.getItem('pmesp_user_name');
+      if (savedName) {
+        dom.inputJoinUsername.value = savedName;
+      } else {
+        dom.inputJoinUsername.value = '';
+      }
+
+      // Foca automaticamente no campo de nome para o usuário só digitar
+      setTimeout(() => {
+        dom.inputJoinUsername.focus();
+        dom.inputJoinUsername.select();
+      }, 250);
+
+      // Transforma o botão para destaque primário com texto claro
+      dom.btnJoinRoom.classList.remove('btn-secondary');
+      dom.btnJoinRoom.classList.add('btn-primary');
+      dom.btnJoinRoom.innerHTML = `
+        <span class="material-symbols-outlined">login</span>
+        <span>Entrar na Instrução Agora</span>
+      `;
+
+      showToast(`Convite para a sala ${cleanRoom} identificado. Digite seu nome e clique em Entrar.`, 'info', 5000);
+    } else {
+      // Se não veio por convite, carrega o nome salvo se existir
+      const savedName = localStorage.getItem('pmesp_user_name');
+      if (savedName) {
+        dom.inputCreateUsername.value = savedName;
+        dom.inputJoinUsername.value = savedName;
+      }
     }
   }
 

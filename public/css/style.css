@@ -1183,3 +1183,110 @@ footer {
     height: 380px;
   }
 }
+
+/* ==========================================================================
+   SISTEMA DE CONVITE E COMPARTILHAMENTO DE SALAS
+   ========================================================================== */
+.invite-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.25) 0%, rgba(26, 28, 32, 0.95) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+  animation: banner-appear 0.3s ease-out;
+}
+
+@keyframes banner-appear {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.invite-banner-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.invite-banner-body {
+  flex: 1;
+}
+
+.invite-banner-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #60a5fa;
+  margin-bottom: 4px;
+}
+
+.invite-banner-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.invite-banner-title span {
+  color: #93c5fd;
+  background-color: rgba(59, 130, 246, 0.15);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.invite-banner-desc {
+  font-size: 13px;
+  color: var(--tertiary);
+}
+
+.invite-banner-desc strong {
+  color: #ffffff;
+}
+
+/* Destaque no Card de Entrada quando via Convite */
+.pm-card.card-highlight {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+/* Botão Moderno de Compartilhar Link */
+.btn-copy-share {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.btn-copy-share:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.55);
+  transform: translateY(-1px);
+}
+
+.btn-copy-share:active {
+  transform: translateY(0);
+}
+

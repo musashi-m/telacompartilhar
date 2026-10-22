@@ -55,11 +55,23 @@
           <p>Crie uma sala de instrução para transmitir sua tela via SFU ou participe de uma sala existente.</p>
         </div>
 
+        <!-- Banner Dinâmico de Convite (exibido quando o aluno acessa via link ?room=...) -->
+        <div id="invite-banner" class="invite-banner" style="display: none;">
+          <div class="invite-banner-icon">
+            <span class="material-symbols-outlined">link</span>
+          </div>
+          <div class="invite-banner-body">
+            <div class="invite-banner-badge">CONVITE DE INSTRUÇÃO IDENTIFICADO</div>
+            <h3 class="invite-banner-title">Você foi convidado para a sala <span id="invite-room-code" class="mono">PMESP-000-A</span></h3>
+            <p class="invite-banner-desc">Digite apenas o seu nome ou posto abaixo e clique em <strong>Entrar na Sala</strong> para assistir à transmissão ao vivo.</p>
+          </div>
+        </div>
+
         <!-- Grid de Ações -->
         <div class="grid-cards">
           
           <!-- Card Criar Sala -->
-          <div class="pm-card">
+          <div class="pm-card" id="card-create-room">
             <div>
               <div class="card-header">
                 <h2>Criar Nova Sala</h2>
@@ -67,7 +79,7 @@
                   <span class="material-symbols-outlined">video_call</span>
                 </div>
               </div>
-              <p class="card-desc">Inicie uma sessão de transmissão com arquitetura SFU para múltiplos espectadores em tempo real.</p>
+              <p class="card-desc">Inicie uma sessão de transmissão com WebRTC de ultra baixa latência para seus alunos.</p>
               
               <div class="form-group">
                 <label for="create-topic">NOME DA AULA / REUNIÃO</label>
@@ -89,7 +101,7 @@
           </div>
 
           <!-- Card Entrar em Sala -->
-          <div class="pm-card">
+          <div class="pm-card" id="card-join-room">
             <div>
               <div class="card-header">
                 <h2>Entrar em Sala</h2>
@@ -97,16 +109,19 @@
                   <span class="material-symbols-outlined">login</span>
                 </div>
               </div>
-              <p class="card-desc">Acesse uma transmissão em andamento utilizando o código compartilhado pelo instrutor.</p>
+              <p class="card-desc">Acesse uma transmissão em andamento utilizando o link compartilhado pelo instrutor.</p>
               
               <div class="form-group">
-                <label for="join-code">CÓDIGO DA SALA</label>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label for="join-code">CÓDIGO DA SALA</label>
+                  <span id="join-code-badge" class="badge-tag badge-idle" style="display: none; font-size: 10px;">Preenchido via Link</span>
+                </div>
                 <input type="text" id="join-code" class="form-control mono-input" placeholder="Ex: PMESP-101-A" style="text-transform: uppercase;">
               </div>
 
               <div class="form-group">
                 <label for="join-username">SEU NOME / POSTO / IDENTIFICAÇÃO</label>
-                <input type="text" id="join-username" class="form-control" placeholder="Ex: Sgt PM Silva" value="Sgt PM Silva">
+                <input type="text" id="join-username" class="form-control" placeholder="Ex: Sgt PM Silva" value="Sgt PM Silva" autocomplete="name">
               </div>
             </div>
 
@@ -159,9 +174,9 @@
             <span class="session-name" id="session-room-topic">Instrução Operacional</span>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="session-id" id="session-room-id">PMESP-000-A</span>
-              <button class="btn-icon-sub" id="btn-copy-link" style="padding: 2px 8px; font-size: 10px;">
-                <span class="material-symbols-outlined" style="font-size: 14px;">content_copy</span>
-                <span id="copy-text">Copiar Código</span>
+              <button class="btn-copy-share" id="btn-copy-link" title="Copiar link para convidar alunos">
+                <span class="material-symbols-outlined" style="font-size: 15px;">share</span>
+                <span id="copy-text">Copiar Link da Sala</span>
               </button>
             </div>
           </div>
@@ -343,8 +358,15 @@
           <!-- ABA 1: PARTICIPANTES REAIS -->
           <div class="tab-content active" id="tab-users">
             <div style="padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
-              <span class="label-mono" style="color: var(--tertiary);">PARTICIPANTES REAIS</span>
-              <span class="label-mono" style="color: var(--status-ok);">CONEXÃO SFU</span>
+              <span class="label-mono" style="color: var(--tertiary);">PARTICIPANTES NA SALA</span>
+              <span class="label-mono" style="color: var(--status-ok);">P2P ATIVO</span>
+            </div>
+            
+            <div style="padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); background-color: var(--surface-container-low);">
+              <button class="btn-secondary" id="btn-copy-invite-sidebar" style="width: 100%; padding: 8px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--border-highlight);">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--secondary);">content_copy</span>
+                <span id="copy-text-sidebar">Compartilhar Link da Sala</span>
+              </button>
             </div>
             
             <div class="peer-list-wrapper" id="peer-list">
