@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="pt-BR"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><title>PMESP | Transmissão de Instrução</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"secondary-container":"#39485a","on-error":"#690005","error-container":"#93000a","tertiary":"#c3c6d2","surface-container-low":"#1a1c20","on-background":"#e2e2e8","primary-container":"#d32f2f","primary-fixed-dim":"#ffb3ac","on-primary-fixed-variant":"#930010","primary":"#ffb3ac","tertiary-fixed":"#dfe2ee","surface":"#111317","on-secondary-fixed":"#0d1c2d","on-secondary-container":"#a7b6cc","surface-tint":"#ffb3ac","tertiary-fixed-dim":"#c3c6d2","surface-container-high":"#282a2e","on-secondary-fixed-variant":"#39485a","on-primary-container":"#fff2f0","on-tertiary-fixed":"#181c24","secondary-fixed":"#d4e4fa","tertiary-container":"#6c707b","on-primary":"#680008","surface-container-highest":"#333539","primary-fixed":"#ffdad6","on-tertiary-container":"#f3f5ff","inverse-primary":"#ba1a20","on-surface-variant":"#e4beba","error":"#ffb4ab","surface-container":"#1e2024","secondary":"#b9c8de","surface-container-lowest":"#0c0e12","on-secondary":"#233143","on-error-container":"#ffdad6","on-surface":"#e2e2e8","on-primary-fixed":"#410003","background":"#111317","surface-dim":"#111317","on-tertiary-fixed-variant":"#434750","surface-variant":"#333539","outline-variant":"#5b403d","surface-bright":"#37393e","on-tertiary":"#2c303a","secondary-fixed-dim":"#b9c8de","inverse-on-surface":"#2f3035","outline":"#ab8985","inverse-surface":"#e2e2e8"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"gutter-sm":"1rem","space-sm":"0.5rem","margin-sm":"1rem","space-xs":"0.25rem","gutter":"1.5rem","margin":"2rem","space-xl":"2.5rem","space-md":"1rem","space-lg":"1.5rem"},"fontFamily":{"body-sm":["Inter"],"body-md":["Inter"],"headline-lg":["Inter"],"label-lg":["JetBrains Mono"],"headline-xl":["Inter"],"headline-sm":["Inter"],"label-md":["JetBrains Mono"],"headline-xl-mobile":["Inter"],"body-lg":["Inter"],"headline-md":["Inter"],"headline-lg-mobile":["Inter"],"label-sm":["JetBrains Mono"],"title-md":["Inter"]},"fontSize":{"body-sm":["12px",{"lineHeight":"18px","fontWeight":"400"}],"body-md":["14px",{"lineHeight":"22px","fontWeight":"400"}],"headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-lg":["13px",{"lineHeight":"18px","letterSpacing":"0.04em","fontWeight":"500"}],"headline-xl":["40px",{"lineHeight":"48px","letterSpacing":"-0.02em","fontWeight":"700"}],"headline-sm":["20px",{"lineHeight":"28px","fontWeight":"600"}],"label-md":["11px",{"lineHeight":"16px","letterSpacing":"0.05em","fontWeight":"500"}],"headline-xl-mobile":["30px",{"lineHeight":"36px","letterSpacing":"-0.01em","fontWeight":"700"}],"body-lg":["16px",{"lineHeight":"26px","fontWeight":"400"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"600"}],"headline-lg-mobile":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"600"}],"label-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.06em","fontWeight":"600"}],"title-md":["16px",{"lineHeight":"24px","fontWeight":"600"}]}}}}</script></head><body class="bg-background font-body-md text-on-surface min-h-screen flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-surface-container-high"><div class="h-16 w-full px-gutter flex items-center justify-between"><div class="flex items-center gap-space-md"><div class="flex items-center justify-center w-8 h-8 rounded bg-surface-container-highest text-on-surface font-label-md text-label-md font-semibold tracking-wider border border-surface-bright">PM</div><div class="flex flex-col"><div class="flex items-center gap-space-xs"><span class="font-title-md text-title-md tracking-tight text-on-surface font-semibold">PMESP</span><span class="text-tertiary-container">|</span><span class="font-body-md text-body-md text-tertiary">Transmissão de Instrução</span></div><span class="font-label-sm text-label-sm text-tertiary-container uppercase tracking-widest hidden sm:inline-block">Doutrina Operacional &amp; Capacitação</span></div></div><nav class="flex items-center gap-space-xs" data-active-classes="bg-surface-container-high text-on-surface rounded font-semibold"><a class="px-space-md py-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" data-path="entrar-ou-criar-sala" href="#">Lobby de Salas</a><a class="px-space-md py-space-xs font-label-md text-label-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" data-path="transmissao-ao-vivo" href="#">Sala de Transmissão</a></nav><div class="flex items-center gap-space-md"><div class="hidden md:flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface font-medium">1º TEN PM CAVALCANTE</span><span class="font-label-sm text-label-sm text-tertiary">RE 142.890-4 · 2º BPChq</span></div><div class="h-6 w-[1px] bg-surface-container-high hidden md:block"></div><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-inner"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="w-full pt-16 flex-1 flex flex-col"><div class="flex flex-col w-full">
+<!-- Sub-header Operacional / Metadados de Sessão -->
+<section class="w-full bg-surface-container-lowest px-gutter py-space-sm shadow-md">
+<div class="w-full max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-space-md">
+<!-- Tema e Status -->
+<div class="flex items-center gap-space-md">
+<div class="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container-high rounded text-primary-fixed">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-container animate-ping"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary">● AO VIVO</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-sm">
+<span class="font-title-md text-title-md text-on-surface font-semibold tracking-tight">POP 12 — Abordagem Tática a Veículos</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 bg-surface-container rounded text-tertiary">MÓDULO III</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary tracking-wide">DOUTRINA OPERACIONAL · INSTRUÇÃO CONTINUADA</span>
+</div>
+</div>
+<!-- Telemetria & Sala -->
+<div class="flex items-center gap-space-lg">
+<!-- Cronômetro de Sessão -->
+<div class="flex items-center gap-space-xs bg-surface-container px-space-md py-1.5 rounded">
+<span class="material-symbols-outlined text-[18px] text-tertiary">timer</span>
+<span class="font-label-md text-label-md text-on-surface tracking-wider font-semibold" id="session-timer">00:42:15</span>
+</div>
+<!-- Código da Sala com Copiar -->
+<div class="flex items-center bg-surface-container rounded p-0.5">
+<div class="px-space-sm font-label-md text-label-md text-on-surface tracking-wider">
+            PMESP-784-A
+          </div>
+<button class="flex items-center gap-1 bg-surface-container-high hover:bg-surface-bright text-on-surface px-space-sm py-1 rounded transition-colors text-label-sm font-label-sm" id="btn-copy-code" onclick="copySessionCode()">
+<span class="material-symbols-outlined text-[16px] text-secondary">content_copy</span>
+<span id="copy-text">Copiar Link</span>
+</button>
+</div>
+<!-- Modo de Foco / Toggle Painel Lateral -->
+<button class="flex items-center justify-center w-8 h-8 rounded bg-surface-container hover:bg-surface-container-high text-tertiary hover:text-on-surface transition-colors" onclick="toggleSidePanel()" title="Alternar Painel Lateral">
+<span class="material-symbols-outlined text-[20px]" id="panel-toggle-icon">vertical_split</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Workspace Principal (Stage 80% / Painel Técnico 20%) -->
+<div class="w-full flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1920px] mx-auto p-space-md gap-space-md">
+<!-- ÁREA DE TRANSMISSÃO & STAGE (Predominante) -->
+<div class="flex-1 flex flex-col min-w-0 h-[calc(100vh-14rem)] lg:h-[calc(100vh-10.5rem)] relative rounded-xl overflow-hidden bg-surface-container-low shadow-xl">
+<!-- Visualizador Principal: Compartilhamento de Slides Operacionais em Alta Definição -->
+<div class="relative w-full h-full flex flex-col justify-between p-space-md select-none bg-surface-container-lowest">
+<!-- Indicador discreto de stream de tela -->
+<div class="flex items-center justify-between z-10">
+<div class="flex items-center gap-space-xs bg-surface-container-highest/90 backdrop-blur px-space-sm py-1 rounded text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-primary text-[16px]">screen_share</span>
+<span>Compartilhamento Ativo: SLIDES_POP12_REV04.PDF (1080p60)</span>
+</div>
+<div class="flex items-center gap-space-xs bg-surface-container-highest/80 backdrop-blur px-space-sm py-1 rounded font-label-sm text-label-sm text-tertiary">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span>Gravação em Nuvem Corporativa</span>
+</div>
+</div>
+<!-- Conteúdo do Slide Operacional Tático (Visual Rico com Infográfico Técnico Vetorial) -->
+<div class="absolute inset-0 flex items-center justify-center p-space-lg pointer-events-none">
+<div class="w-full max-w-4xl bg-surface-container p-space-xl rounded-xl shadow-2xl flex flex-col gap-space-lg">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary tracking-widest uppercase">Protocolo Padrão · Viatura de Força Tática</span>
+<h2 class="font-headline-md text-headline-md text-on-surface font-semibold tracking-tight">Posicionamento de Viatura e Ângulos de Varredura</h2>
+</div>
+<span class="font-label-lg text-label-lg text-tertiary">ETAPA 03 / 08</span>
+</div>
+<!-- SVG Diagrama Tático Vetorial de Aproximação -->
+<div class="w-full h-56 bg-surface-container-lowest rounded-lg flex items-center justify-center relative overflow-hidden p-space-md">
+<svg class="w-full h-full" fill="none" viewbox="0 0 700 240" xmlns="http://www.w3.org/2000/svg">
+<!-- Grade Operacional de Fundo -->
+<defs>
+<pattern height="30" id="grid-tactical" patternunits="userSpaceOnUse" width="30">
+<path d="M 30 0 L 0 0 0 30" fill="none" stroke="#282a2e" stroke-width="0.75"></path>
+</pattern>
+</defs>
+<rect fill="url(#grid-tactical)" height="240" width="700"></rect>
+<!-- Eixos de Cones de Visão Tática (Vermelho Técnico & Foco) -->
+<path d="M 230 150 L 380 70 L 450 110 Z" fill="#d32f2f" fill-opacity="0.15"></path>
+<path d="M 230 150 L 380 70" stroke="#d32f2f" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<path d="M 230 150 L 450 110" stroke="#d32f2f" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<!-- Viatura Policial (Militar) -->
+<g transform="translate(160, 130)">
+<rect fill="#1e2024" height="42" rx="4" stroke="#c3c6d2" stroke-width="1.5" width="80" x="0" y="0"></rect>
+<rect fill="#333539" height="30" rx="2" width="18" x="5" y="6"></rect>
+<rect fill="#282a2e" height="26" rx="2" width="40" x="30" y="8"></rect>
+<circle cx="50" cy="21" fill="#d32f2f" r="4"></circle>
+<text fill="#e2e2e8" font-family="JetBrains Mono" font-size="10" font-weight="600" text-anchor="middle" x="40" y="-8">M-02201 (45° DEFENSIVO)</text>
+</g>
+<!-- Veículo Abordado -->
+<g transform="translate(420, 70)">
+<rect fill="#282a2e" height="42" rx="4" stroke="#5b403d" stroke-width="1.5" width="84" x="0" y="0"></rect>
+<rect fill="#1e2024" height="26" rx="2" width="16" x="6" y="8"></rect>
+<rect fill="#1e2024" height="26" rx="2" width="18" x="60" y="8"></rect>
+<text fill="#ffb3ac" font-family="JetBrains Mono" font-size="10" font-weight="600" text-anchor="middle" x="42" y="-8">VEÍCULO SUSPEITO</text>
+</g>
+<!-- Linhas de Distanciamento de Segurança e Metragem -->
+<line stroke="#ffb3ac" stroke-dasharray="2 2" stroke-width="1" x1="240" x2="420" y1="150" y2="90"></line>
+<circle cx="330" cy="120" fill="#111317" r="10" stroke="#ffb3ac" stroke-width="1"></circle>
+<text fill="#ffb3ac" font-family="JetBrains Mono" font-size="9" text-anchor="middle" x="330" y="123">5.5m</text>
+<!-- Setores de Desembarque Tático -->
+<circle cx="215" cy="115" fill="#d32f2f" r="5"></circle>
+<text fill="#e2e2e8" font-family="Inter" font-size="10" x="215" y="105">Comandante de Equipe</text>
+<circle cx="215" cy="185" fill="#d32f2f" r="5"></circle>
+<text fill="#e2e2e8" font-family="Inter" font-size="10" x="215" y="198">Motorista (Segurança de Flanco)</text>
+</svg>
+</div>
+<!-- Pontos Doutrinários Clave do Slide -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<div class="bg-surface-container-high p-space-sm rounded">
+<span class="font-label-sm text-label-sm text-primary uppercase block font-semibold">1. Ângulo de Abrigo</span>
+<p class="font-body-sm text-body-sm text-on-surface mt-1">Alinhamento das rodas esterçadas para fornecer anteparo balístico imediato.</p>
+</div>
+<div class="bg-surface-container-high p-space-sm rounded">
+<span class="font-label-sm text-label-sm text-primary uppercase block font-semibold">2. Distância de Reação</span>
+<p class="font-body-sm text-body-sm text-on-surface mt-1">Margem mínima de 5 a 6 metros permitindo escape motorizado ou progressão segura.</p>
+</div>
+<div class="bg-surface-container-high p-space-sm rounded">
+<span class="font-label-sm text-label-sm text-primary uppercase block font-semibold">3. Verbalização</span>
+<p class="font-body-sm text-body-sm text-on-surface mt-1">Comandos sonoros concisos e inequívocos sem sobreposição de vozes dos operadores.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- WEBCAM INSTRUTOR (Overlay Elegante no Canto Inferior Direito) -->
+<div class="absolute bottom-24 right- space-md w-52 md:w-64 h-36 md:h-44 rounded-xl overflow-hidden bg-surface-container-high shadow-2xl z-20 pointer-events-auto group">
+<img class="w-full h-full object-cover" data-alt="Official Brazilian Military Police instructor in crisp dark uniform during tactical training broadcast, seated in high-tech simulation command post with clean lighting and discipline, focused posture, cinematic realism" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPRcEub1a4sJ_TDDCXtOPR7_jyKDx7f36ccUI9I8aBcu-4ELOf9EKYoOWRw2ks5SkvPiRN06ZXlEq4CanEuH37CScRZVhEEODebmRVFBNJlG2uzeKm_ZcaSs0GukfRakw1_n4QKk9W5COqL7Q_6SCWuBmdRDgGKXTDr9Ku9oP9eUc5krpgZTAHWoZ-gEnFc_IjmivLF18BeBOgGq1h4PlpM47w2Xl-Iv4Yc-i_20QDMI4xsbA82sJV"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/90 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 flex items-center gap-1 bg-surface-container-lowest/80 px-2 py-0.5 rounded backdrop-blur">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">INSTRUTOR TITULAR</span>
+</div>
+<div class="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold truncate">1º TEN CAVALCANTE</span>
+<span class="font-label-sm text-label-sm text-tertiary">2º BPChq · Doutrina</span>
+</div>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">mic</span>
+</div>
+</div>
+</div>
+<!-- BARRA DE CONTROLE INFERIOR FLUTUANTE (Clean, Espaçosa e Ergonômica) -->
+<div class="w-full flex justify-center z-30 pb-space-sm">
+<div class="bg-surface-container-high/95 backdrop-blur-md px-space-lg py-space-sm rounded-full shadow-2xl flex items-center gap-space-md sm:gap-space-lg">
+<!-- Microfone -->
+<button class="flex flex-col items-center gap-1 group" id="btn-mic" onclick="toggleAudio()">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface" id="mic-circle">
+<span class="material-symbols-outlined text-[20px]" id="mic-icon">mic</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary group-hover:text-on-surface" id="mic-label">Áudio</span>
+</button>
+<!-- Câmera -->
+<button class="flex flex-col items-center gap-1 group" id="btn-cam" onclick="toggleVideo()">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface" id="cam-circle">
+<span class="material-symbols-outlined text-[20px]" id="cam-icon">videocam</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary group-hover:text-on-surface" id="cam-label">Vídeo</span>
+</button>
+<!-- Compartilhar Tela (Destaque Ativo) -->
+<button class="flex flex-col items-center gap-1 group" id="btn-screen" onclick="toggleScreenShare()">
+<div class="w-11 h-11 rounded-full bg-primary-container flex items-center justify-center transition-all text-on-primary-container shadow-sm" id="screen-circle">
+<span class="material-symbols-outlined text-[20px]">screen_share</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold" id="screen-label">Tela Ativa</span>
+</button>
+<!-- Gravação (REC) -->
+<button class="flex flex-col items-center gap-1 group" onclick="toggleRec()">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-primary">
+<span class="material-symbols-outlined text-[20px] fill-current">radio_button_checked</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary group-hover:text-on-surface">Gravação</span>
+</button>
+<div class="h-8 w-[1px] bg-surface-container hidden sm:block"></div>
+<!-- Participantes -->
+<button class="flex flex-col items-center gap-1 group relative" onclick="switchTab('tab-users')">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface">
+<span class="material-symbols-outlined text-[20px]">group</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary group-hover:text-on-surface">148 PMs</span>
+<span class="absolute top-0 right-1 w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+</button>
+<!-- Dúvidas / Perguntas -->
+<button class="flex flex-col items-center gap-1 group relative" onclick="switchTab('tab-qa')">
+<div class="w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface">
+<span class="material-symbols-outlined text-[20px]">quiz</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary group-hover:text-on-surface">Dúvidas</span>
+<span class="absolute top-0 right-1 px-1 rounded-full bg-primary-container font-label-sm text-[9px] text-on-primary-container">3</span>
+</button>
+<div class="h-8 w-[1px] bg-surface-container hidden sm:block"></div>
+<!-- Botão Crítico: Encerrar Transmissão -->
+<button class="flex items-center gap-space-xs bg-primary-container hover:bg-on-error text-on-primary-container px-space-md py-2.5 rounded-full transition-colors shadow-lg" onclick="promptExit()">
+<span class="material-symbols-outlined text-[20px]">call_end</span>
+<span class="font-label-md text-label-md font-semibold hidden md:inline">Encerrar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- COLUNA LATERAL TÉCNICA (Compacta & Focada: Participantes e Perguntas) -->
+<aside class="w-full lg:w-96 flex flex-col h-[calc(100vh-14rem)] lg:h-[calc(100vh-10.5rem)] bg-surface-container rounded-xl overflow-hidden shadow-xl transition-all duration-300" id="side-panel">
+<!-- Cabeçalho de Abas -->
+<div class="flex items-center bg-surface-container-low p-1 gap-1">
+<button class="flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-semibold transition-all bg-surface-container text-on-surface shadow-sm flex items-center justify-center gap-space-xs" id="btn-tab-users" onclick="switchTab('tab-users')">
+<span class="material-symbols-outlined text-[18px]">badge</span>
+<span>Efetivo Conectado</span>
+<span class="px-1.5 py-0.2 rounded bg-surface-container-highest font-label-sm text-label-sm text-tertiary">148</span>
+</button>
+<button class="flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-medium transition-all text-tertiary hover:text-on-surface flex items-center justify-center gap-space-xs" id="btn-tab-qa" onclick="switchTab('tab-qa')">
+<span class="material-symbols-outlined text-[18px]">forum</span>
+<span>Dúvidas &amp; Q&amp;A</span>
+<span class="px-1.5 py-0.2 rounded bg-primary-container font-label-sm text-label-sm text-on-primary-container">3</span>
+</button>
+</div>
+<!-- PAINEL 1: Policiais Conectados -->
+<div class="flex-1 flex flex-col min-h-0" id="content-tab-users">
+<!-- Filtro Rápido -->
+<div class="p-space-sm bg-surface-container">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-2.5 top-2.5 text-tertiary text-[18px]">search</span>
+<input class="w-full h-9 bg-surface-container-low pl-9 pr-space-sm rounded font-body-sm text-body-sm text-on-surface placeholder:text-tertiary focus:outline-none focus:bg-surface-container-highest" placeholder="Filtrar por RE, Nome ou Batalhão..." type="text"/>
+</div>
+</div>
+<!-- Lista Escalonada de Conectados -->
+<div class="flex-1 overflow-y-auto px-space-sm py-space-xs space-y-1">
+<!-- Instrutor (Fixado) -->
+<div class="p-space-sm bg-surface-container-high rounded flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-label-sm text-label-sm font-bold">
+                TC
+              </div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface font-bold">1º TEN PM CAVALCANTE</span>
+<span class="font-label-sm text-[9px] px-1 bg-primary text-on-primary rounded font-bold">INSTRUTOR</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary">RE 142.890-4 · 2º BPChq</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[16px]">mic</span>
+<span class="material-symbols-outlined text-[16px]">videocam</span>
+</div>
+</div>
+<!-- Aluno 1 -->
+<div class="p-space-sm bg-surface-container-low hover:bg-surface-container-high rounded flex items-center justify-between transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-tertiary font-label-sm text-label-sm">
+                AS
+              </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">2º SGT PM A. SANTOS</span>
+<span class="font-label-sm text-label-sm text-tertiary">RE 154.221-8 · 7º BPM/M</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-[16px] text-tertiary">mic_off</span>
+</div>
+<!-- Aluno 2 -->
+<div class="p-space-sm bg-surface-container-low hover:bg-surface-container-high rounded flex items-center justify-between transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-tertiary font-label-sm text-label-sm">
+                MO
+              </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">CB PM MARCOS OLIVEIRA</span>
+<span class="font-label-sm text-label-sm text-tertiary">RE 168.903-1 · 1º BPTran</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-[16px] text-tertiary">mic_off</span>
+</div>
+<!-- Aluno 3 -->
+<div class="p-space-sm bg-surface-container-low hover:bg-surface-container-high rounded flex items-center justify-between transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-tertiary font-label-sm text-label-sm">
+                RS
+              </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">SD 1ª CL PM RENATA SILVA</span>
+<span class="font-label-sm text-label-sm text-tertiary">RE 189.442-0 · 4º BAEP</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-[16px] text-tertiary">mic_off</span>
+</div>
+<!-- Aluno 4 -->
+<div class="p-space-sm bg-surface-container-low hover:bg-surface-container-high rounded flex items-center justify-between transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-tertiary font-label-sm text-label-sm">
+                FL
+              </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">SD 1ª CL PM F. LIMA</span>
+<span class="font-label-sm text-label-sm text-tertiary">RE 191.034-7 · CPA/M-1</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-[16px] text-tertiary">mic_off</span>
+</div>
+<!-- Aluno 5 -->
+<div class="p-space-sm bg-surface-container-low hover:bg-surface-container-high rounded flex items-center justify-between transition-colors">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-tertiary font-label-sm text-label-sm">
+                EB
+              </div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">SUBTEN PM E. BARBOSA</span>
+<span class="font-label-sm text-label-sm text-tertiary">RE 138.776-9 · 11º BPM/I</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-[16px] text-tertiary">mic_off</span>
+</div>
+</div>
+<!-- Rodapé do Efetivo -->
+<div class="p-space-sm bg-surface-container-low flex items-center justify-between font-label-sm text-label-sm text-tertiary">
+<span>Lista de Presença Automática</span>
+<span class="text-primary font-semibold">SINCRONIZADO</span>
+</div>
+</div>
+<!-- PAINEL 2: Dúvidas & Perguntas Focadas -->
+<div class="flex-1 flex-col min-h-0 hidden" id="content-tab-qa">
+<!-- Lista de Dúvidas Moderadas -->
+<div class="flex-1 overflow-y-auto p-space-sm space-y-space-sm" id="qa-stream">
+<!-- Dúvida 1 -->
+<div class="p-space-sm bg-surface-container-low rounded flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">CB PM MARCOS OLIVEIRA (1º BPTran)</span>
+<span class="font-label-sm text-label-sm text-tertiary">14:38</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface">Em caso de veículo com película antivandalismo escura, o procedimento de aproximação mantém os 5.5m ou aumenta?</p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-[10px] text-primary uppercase font-semibold">Aguardando Resposta</span>
+<button class="px-space-xs py-0.5 bg-surface-container-highest hover:bg-surface-bright rounded text-tertiary font-label-sm text-[10px]" onclick="markAnswered(this)">Responder ao Vivo</button>
+</div>
+</div>
+<!-- Dúvida 2 -->
+<div class="p-space-sm bg-surface-container-low rounded flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">SD 1ª CL PM RENATA SILVA (4º BAEP)</span>
+<span class="font-label-sm text-label-sm text-tertiary">14:40</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface">Qual o protocolo para abordagem com suspeita de armamento pesado em rodovia estadual?</p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-[10px] text-tertiary uppercase font-semibold">Respondida pelo Instrutor</span>
+<span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+</div>
+</div>
+<!-- Dúvida 3 -->
+<div class="p-space-sm bg-surface-container-low rounded flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">2º SGT PM A. SANTOS (7º BPM/M)</span>
+<span class="font-label-sm text-label-sm text-tertiary">14:41</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface">O material de apoio do POP 12 estará liberado para download na intranet após a transmissão?</p>
+<div class="flex items-center justify-between pt-1">
+<span class="font-label-sm text-[10px] text-primary uppercase font-semibold">Aguardando Resposta</span>
+<button class="px-space-xs py-0.5 bg-surface-container-highest hover:bg-surface-bright rounded text-tertiary font-label-sm text-[10px]" onclick="markAnswered(this)">Responder ao Vivo</button>
+</div>
+</div>
+</div>
+<!-- Envio de Dúvida / Chat -->
+<div class="p-space-sm bg-surface-container-low flex flex-col gap-space-xs">
+<div class="flex gap-space-xs">
+<input class="flex-1 h-10 bg-surface-container px-space-sm rounded font-body-sm text-body-sm text-on-surface placeholder:text-tertiary focus:outline-none focus:bg-surface-container-highest" id="input-qa" placeholder="Formular pergunta técnica ao instrutor..." type="text"/>
+<button class="h-10 px-space-md bg-primary-container hover:bg-on-error text-on-primary-container rounded flex items-center justify-center transition-colors" onclick="submitQuestion()">
+<span class="material-symbols-outlined text-[20px]">send</span>
+</button>
+</div>
+<span class="font-label-sm text-[10px] text-tertiary">Canal reservado estritamente para esclarecimento doutrinário.</span>
+</div>
+</div>
+</aside>
+</div>
+<!-- Modal Discreto de Confirmação de Saída / Encerramento -->
+<div class="fixed inset-0 bg-surface-container-lowest/80 backdrop-blur-sm z-50 flex items-center justify-center p-space-md hidden" id="exit-modal">
+<div class="w-full max-w-md bg-surface-container-high rounded-xl p-space-lg shadow-2xl flex flex-col gap-space-md">
+<div class="flex items-center gap-space-sm text-primary">
+<span class="material-symbols-outlined text-[28px]">warning</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Encerrar Instrução Técnica?</h3>
+</div>
+<p class="font-body-md text-body-md text-tertiary">
+        Você está prestes a finalizar a transmissão da aula <strong class="text-on-surface">POP 12 — Abordagem Tática a Veículos</strong> para os 148 policiais militares conectados. O registro de presença será computado e arquivado.
+      </p>
+<div class="flex items-center justify-end gap-space-sm pt-space-xs">
+<button class="px-space-md py-2 rounded bg-surface-container hover:bg-surface-bright font-label-md text-label-md text-on-surface transition-colors" onclick="closeModal()">
+          Cancelar
+        </button>
+<button class="px-space-md py-2 rounded bg-primary-container hover:bg-on-error font-label-md text-label-md text-on-primary-container font-semibold transition-colors" onclick="confirmExit()">
+          Confirmar Encerramento
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  let isAudioActive = true;
+  let isVideoActive = true;
+  let isScreenSharing = true;
+  let isSidePanelOpen = true;
+
+  // Alternar Microfone
+  function toggleAudio() {
+    isAudioActive = !isAudioActive;
+    const circle = document.getElementById('mic-circle');
+    const icon = document.getElementById('mic-icon');
+    const label = document.getElementById('mic-label');
+    
+    if (isAudioActive) {
+      circle.className = "w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface";
+      icon.innerText = "mic";
+      label.innerText = "Áudio";
+    } else {
+      circle.className = "w-11 h-11 rounded-full bg-surface-container-lowest flex items-center justify-center transition-all text-primary";
+      icon.innerText = "mic_off";
+      label.innerText = "Mudo";
+    }
+  }
+
+  // Alternar Câmera
+  function toggleVideo() {
+    isVideoActive = !isVideoActive;
+    const circle = document.getElementById('cam-circle');
+    const icon = document.getElementById('cam-icon');
+    const label = document.getElementById('cam-label');
+    
+    if (isVideoActive) {
+      circle.className = "w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface";
+      icon.innerText = "videocam";
+      label.innerText = "Vídeo";
+    } else {
+      circle.className = "w-11 h-11 rounded-full bg-surface-container-lowest flex items-center justify-center transition-all text-primary";
+      icon.innerText = "videocam_off";
+      label.innerText = "Vídeo Off";
+    }
+  }
+
+  // Alternar Compartilhamento de Tela
+  function toggleScreenShare() {
+    isScreenSharing = !isScreenSharing;
+    const circle = document.getElementById('screen-circle');
+    const label = document.getElementById('screen-label');
+
+    if (isScreenSharing) {
+      circle.className = "w-11 h-11 rounded-full bg-primary-container flex items-center justify-center transition-all text-on-primary-container shadow-sm";
+      label.innerText = "Tela Ativa";
+      label.className = "font-label-sm text-label-sm text-primary font-semibold";
+    } else {
+      circle.className = "w-11 h-11 rounded-full bg-surface-container-highest group-hover:bg-surface-bright flex items-center justify-center transition-all text-on-surface";
+      label.innerText = "Compartilhar";
+      label.className = "font-label-sm text-label-sm text-tertiary group-hover:text-on-surface";
+    }
+  }
+
+  // Alternar Gravação
+  function toggleRec() {
+    alert("Gravação em andamento com carimbo institucional de data/hora (SHA-256).");
+  }
+
+  // Copiar Código da Sala
+  function copySessionCode() {
+    navigator.clipboard.writeText("https://ensino.policiamilitar.sp.gov.br/sala/PMESP-784-A");
+    const copyText = document.getElementById('copy-text');
+    copyText.innerText = "Copiado!";
+    setTimeout(() => {
+      copyText.innerText = "Copiar Link";
+    }, 2000);
+  }
+
+  // Alternar Painel Lateral
+  function toggleSidePanel() {
+    const panel = document.getElementById('side-panel');
+    const icon = document.getElementById('panel-toggle-icon');
+    isSidePanelOpen = !isSidePanelOpen;
+    if (isSidePanelOpen) {
+      panel.classList.remove('hidden');
+      icon.innerText = "vertical_split";
+    } else {
+      panel.classList.add('hidden');
+      icon.innerText = "fullscreen";
+    }
+  }
+
+  // Alternador de Abas do Painel Lateral
+  function switchTab(tabId) {
+    const btnUsers = document.getElementById('btn-tab-users');
+    const btnQa = document.getElementById('btn-tab-qa');
+    const contentUsers = document.getElementById('content-tab-users');
+    const contentQa = document.getElementById('content-tab-qa');
+
+    if (tabId === 'tab-users') {
+      btnUsers.className = "flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-semibold transition-all bg-surface-container text-on-surface shadow-sm flex items-center justify-center gap-space-xs";
+      btnQa.className = "flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-medium transition-all text-tertiary hover:text-on-surface flex items-center justify-center gap-space-xs";
+      contentUsers.classList.remove('hidden');
+      contentQa.classList.add('hidden');
+    } else {
+      btnQa.className = "flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-semibold transition-all bg-surface-container text-on-surface shadow-sm flex items-center justify-center gap-space-xs";
+      btnUsers.className = "flex-1 py-2 px-space-sm rounded font-label-md text-label-md font-medium transition-all text-tertiary hover:text-on-surface flex items-center justify-center gap-space-xs";
+      contentUsers.classList.add('hidden');
+      contentQa.classList.remove('hidden');
+    }
+  }
+
+  // Enviar Pergunta Técnica
+  function submitQuestion() {
+    const input = document.getElementById('input-qa');
+    const stream = document.getElementById('qa-stream');
+    if (!input.value.trim()) return;
+
+    const div = document.createElement('div');
+    div.className = "p-space-sm bg-surface-container-low rounded flex flex-col gap-1.5 animate-fadeIn";
+    div.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="font-label-sm text-label-sm text-on-surface font-semibold">1º TEN PM CAVALCANTE (Instrutor)</span>
+        <span class="font-label-sm text-label-sm text-tertiary">Agora</span>
+      </div>
+      <p class="font-body-sm text-body-sm text-on-surface">${input.value}</p>
+      <div class="flex items-center justify-between pt-1">
+        <span class="font-label-sm text-[10px] text-primary uppercase font-semibold">Registrada em Ata</span>
+        <span class="material-symbols-outlined text-[16px] text-primary">done</span>
+      </div>
+    `;
+    stream.prepend(div);
+    input.value = "";
+  }
+
+  function markAnswered(btn) {
+    const parent = btn.parentElement;
+    parent.innerHTML = `
+      <span class="font-label-sm text-[10px] text-tertiary uppercase font-semibold">Respondida pelo Instrutor</span>
+      <span class="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+    `;
+  }
+
+  // Modal de Encerramento
+  function promptExit() {
+    document.getElementById('exit-modal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    document.getElementById('exit-modal').classList.add('hidden');
+  }
+
+  function confirmExit() {
+    window.location.reload();
+  }
+
+  // Cronômetro progressivo de instrução
+  let totalSeconds = 42 * 60 + 15;
+  setInterval(() => {
+    totalSeconds++;
+    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    const timerElem = document.getElementById('session-timer');
+    if (timerElem) {
+      timerElem.innerText = `${hours}:${minutes}:${seconds}`;
+    }
+  }, 1000);
+</script></main><footer class="w-full bg-surface-container-lowest border-t border-surface-container-high py-space-sm"><div class="w-full px-gutter flex flex-col sm:flex-row items-center justify-between gap-space-xs text-on-surface-variant font-label-sm text-label-sm"><div class="flex items-center gap-space-md"><span>POLÍCIA MILITAR DO ESTADO DE SÃO PAULO</span><span class="text-tertiary-container hidden sm:inline">•</span><span class="text-tertiary">SISTEMA INTEGRADO DE CAPACITAÇÃO E TRANSMISSÃO TÉCNICA</span></div><div class="flex items-center gap-space-xs font-label-sm text-label-sm text-tertiary"><span>REDE CORPORATIVA SEGURA</span><span class="inline-block w-2 h-2 rounded-full bg-primary-container animate-pulse"></span></div></div></footer></body></html>

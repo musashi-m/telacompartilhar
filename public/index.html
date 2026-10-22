@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PMESP | Transmissão de Instrução e Compartilhamento de Tela</title>
+  
+  <!-- Tipografia Institucional e Ícones Google Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  
+  <!-- Estilos Customizados Vanguarda Institucional PMESP -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ========================================================================
+       CABEÇALHO FIXO
+       ======================================================================== -->
+  <header class="header">
+    <div class="brand-badge">
+      <div class="pm-logo">PM</div>
+      <div class="brand-text">
+        <div class="brand-title">
+          <span>PMESP</span>
+          <span style="color: var(--tertiary-container);">|</span>
+          <span style="font-weight: 500; color: var(--tertiary);" id="header-subtitle">Compartilhamento de Tela & Instrução</span>
+        </div>
+        <span class="brand-subtitle">Serviço de Transmissão WebRTC / SFU</span>
+      </div>
+    </div>
+
+    <div class="header-user">
+      <div style="text-align: right; display: flex; flex-direction: column;">
+        <span style="font-size: 13px; font-weight: 600; color: #ffffff;" id="current-user-display">Operador Local</span>
+        <span style="font-size: 11px; color: var(--tertiary); font-family: var(--font-mono);" id="current-user-role">Host Local</span>
+      </div>
+      <div class="user-avatar" id="current-user-avatar">PM</div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       CONTEÚDO PRINCIPAL
+       ======================================================================== -->
+  <main>
+
+    <!-- TELA 1: LOBBY DE ENTRADA OU CRIAÇÃO DE SALAS -->
+    <section id="view-lobby" class="view-section active">
+      <div class="lobby-container">
+        
+        <div class="lobby-hero">
+          <h1>Salas de Transmissão</h1>
+          <p>Crie uma sala de instrução para transmitir sua tela via SFU ou participe de uma sala existente.</p>
+        </div>
+
+        <!-- Grid de Ações -->
+        <div class="grid-cards">
+          
+          <!-- Card Criar Sala -->
+          <div class="pm-card">
+            <div>
+              <div class="card-header">
+                <h2>Criar Nova Sala</h2>
+                <div class="card-icon">
+                  <span class="material-symbols-outlined">video_call</span>
+                </div>
+              </div>
+              <p class="card-desc">Inicie uma sessão de transmissão com arquitetura SFU para múltiplos espectadores em tempo real.</p>
+              
+              <div class="form-group">
+                <label for="create-topic">NOME DA AULA / REUNIÃO</label>
+                <input type="text" id="create-topic" class="form-control" placeholder="Ex: Instrução Técnica POP 04" value="Instrução Operacional · Procedimentos">
+              </div>
+
+              <div class="form-group">
+                <label for="create-username">SEU NOME / POSTO / IDENTIFICAÇÃO</label>
+                <input type="text" id="create-username" class="form-control" placeholder="Ex: Ten PM Cavalcante" value="Ten PM Cavalcante">
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <button class="btn-primary" id="btn-create-room">
+                <span class="material-symbols-outlined">screen_share</span>
+                <span>Criar Sala e Iniciar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Entrar em Sala -->
+          <div class="pm-card">
+            <div>
+              <div class="card-header">
+                <h2>Entrar em Sala</h2>
+                <div class="card-icon">
+                  <span class="material-symbols-outlined">login</span>
+                </div>
+              </div>
+              <p class="card-desc">Acesse uma transmissão em andamento utilizando o código compartilhado pelo instrutor.</p>
+              
+              <div class="form-group">
+                <label for="join-code">CÓDIGO DA SALA</label>
+                <input type="text" id="join-code" class="form-control mono-input" placeholder="Ex: PMESP-101-A" style="text-transform: uppercase;">
+              </div>
+
+              <div class="form-group">
+                <label for="join-username">SEU NOME / POSTO / IDENTIFICAÇÃO</label>
+                <input type="text" id="join-username" class="form-control" placeholder="Ex: Sgt PM Silva" value="Sgt PM Silva">
+              </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+              <button class="btn-secondary" id="btn-join-room">
+                <span class="material-symbols-outlined">arrow_forward</span>
+                <span>Entrar na Sala</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Seção de Salas Abertas Reais no Servidor -->
+        <div class="rooms-section">
+          <div class="section-title-bar">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 style="font-size: 16px; color: #ffffff;">Salas Abertas no Servidor</h3>
+              <span class="badge-tag badge-idle" id="active-rooms-count">0 ativas</span>
+            </div>
+            <button class="btn-icon-sub" id="btn-refresh-rooms" title="Atualizar Lista">
+              <span class="material-symbols-outlined" style="font-size: 16px;">refresh</span>
+              <span>Atualizar</span>
+            </button>
+          </div>
+
+          <div class="rooms-list" id="rooms-list-container">
+            <div class="empty-state">
+              <span class="material-symbols-outlined" style="font-size: 36px; margin-bottom: 8px; display: block; color: var(--tertiary-container);">meeting_room</span>
+              Nenhuma sala ativa no momento no servidor local.<br>Crie uma sala acima para iniciar a transmissão.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TELA 2: SALA DE TRANSMISSÃO E COMPARTILHAMENTO AO VIVO -->
+    <section id="view-room" class="view-section">
+      
+      <!-- Sub-header Operacional -->
+      <div class="transmission-subbar">
+        <div class="subbar-left">
+          <div class="badge-pulse" id="live-indicator">
+            <span class="pulse-dot"></span>
+            <span id="live-text">EM ESPERA</span>
+          </div>
+
+          <div class="session-info">
+            <span class="session-name" id="session-room-topic">Instrução Operacional</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="session-id" id="session-room-id">PMESP-000-A</span>
+              <button class="btn-icon-sub" id="btn-copy-link" style="padding: 2px 8px; font-size: 10px;">
+                <span class="material-symbols-outlined" style="font-size: 14px;">content_copy</span>
+                <span id="copy-text">Copiar Código</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="subbar-right">
+          <!-- Cronômetro da Sessão -->
+          <div class="session-stat">
+            <span class="material-symbols-outlined" style="font-size: 16px; color: var(--tertiary);">timer</span>
+            <span id="session-timer">00:00:00</span>
+          </div>
+
+          <!-- Status SFU / ICE -->
+          <div class="session-stat" id="sfu-status-stat" title="Status da Conexão WebRTC">
+            <span class="material-symbols-outlined" style="font-size: 16px; color: var(--status-ok);" id="sfu-status-icon">check_circle</span>
+            <span id="sfu-status-text">SFU Ativo</span>
+          </div>
+
+          <!-- Toggle Painel Lateral -->
+          <button class="btn-icon-sub" id="btn-toggle-panel" title="Alternar Painel Lateral">
+            <span class="material-symbols-outlined" style="font-size: 18px;">vertical_split</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Workspace: Visualizador Principal + Painel Técnico -->
+      <div class="workspace-container">
+        
+        <!-- Stage de Transmissão (Vídeo / Apresentação) -->
+        <div class="stage-main">
+          
+          <div class="video-viewport" id="video-viewport">
+            
+            <!-- Badge Superior no Stream Ativo -->
+            <div class="stream-overlay-badge" id="stream-info-badge" style="display: none;">
+              <span class="material-symbols-outlined" style="color: var(--primary-container); font-size: 16px;">screen_share</span>
+              <span id="stream-info-text">Compartilhamento de Tela Ativo (1080p60)</span>
+            </div>
+
+            <!-- Vídeo Principal (Transmissão de Tela) -->
+            <video id="remote-video" class="video-stream" autoplay playsinline></video>
+            
+            <!-- Áudio Remoto do Sistema -->
+            <audio id="remote-audio" autoplay></audio>
+
+            <!-- Placeholder quando NINGUÉM estiver transmitindo -->
+            <div class="placeholder-stage" id="placeholder-stage">
+              <div class="placeholder-icon">
+                <span class="material-symbols-outlined" style="font-size: 32px;" id="placeholder-icon-symbol">screen_share</span>
+              </div>
+              <div>
+                <h3 style="font-size: 18px; color: #ffffff; margin-bottom: 6px;" id="placeholder-title">Nenhuma transmissão ativa nesta sala</h3>
+                <p style="font-size: 13px; color: var(--tertiary); line-height: 1.5;" id="placeholder-desc">
+                  Você pode iniciar o compartilhamento de tela com suporte a 60 FPS, resolução Full HD e áudio do sistema.
+                </p>
+              </div>
+              <button class="btn-primary" id="btn-stage-start-share" style="max-width: 260px;">
+                <span class="material-symbols-outlined">present_to_all</span>
+                <span>Compartilhar Minha Tela</span>
+              </button>
+            </div>
+
+            <!-- Webcam PiP Local (Opcional do Instrutor) -->
+            <div class="webcam-pip" id="webcam-pip">
+              <video id="local-webcam" autoplay playsinline muted></video>
+              <div class="webcam-pip-badge">CÂMERA LOCAL</div>
+            </div>
+
+          </div>
+
+          <!-- Barra de Controles Inferior Flutuante -->
+          <div class="control-bar-wrapper">
+            <div class="control-bar">
+              
+              <!-- Controles de Mídia exclusivos do Criador/Host -->
+              <div id="host-media-controls" style="display: flex; align-items: center; gap: 12px;">
+                <!-- Microfone (Voz) -->
+                <button class="btn-ctrl muted" id="btn-ctrl-mic" title="Microfone (Voz)">
+                  <div class="btn-ctrl-icon">
+                    <span class="material-symbols-outlined" id="icon-ctrl-mic">mic_off</span>
+                  </div>
+                  <span class="btn-ctrl-label" id="label-ctrl-mic">Voz Off</span>
+                </button>
+
+                <!-- Câmera (Webcam) -->
+                <button class="btn-ctrl muted" id="btn-ctrl-cam" title="Câmera do Instrutor">
+                  <div class="btn-ctrl-icon">
+                    <span class="material-symbols-outlined" id="icon-ctrl-cam">videocam_off</span>
+                  </div>
+                  <span class="btn-ctrl-label" id="label-ctrl-cam">Câmera Off</span>
+                </button>
+
+                <div class="ctrl-divider"></div>
+
+                <!-- Compartilhamento de Tela (Destaque Principal) -->
+                <button class="btn-ctrl" id="btn-ctrl-screen" title="Compartilhar Tela / Janela">
+                  <div class="btn-ctrl-icon">
+                    <span class="material-symbols-outlined" id="icon-ctrl-screen">screen_share</span>
+                  </div>
+                  <span class="btn-ctrl-label" id="label-ctrl-screen">Transmitir</span>
+                </button>
+
+                <!-- Configurações de Qualidade / Presets -->
+                <button class="btn-ctrl" id="btn-ctrl-settings" title="Configurações de Transmissão e FPS">
+                  <div class="btn-ctrl-icon">
+                    <span class="material-symbols-outlined">tune</span>
+                  </div>
+                  <span class="btn-ctrl-label">Presets</span>
+                </button>
+
+                <div class="ctrl-divider"></div>
+              </div>
+
+              <!-- Indicador de Modo Espectador (apenas para quem entra via código/link) -->
+              <div id="spectator-mode-badge" style="display: none; align-items: center; gap: 8px; padding: 6px 14px; background: rgba(30, 32, 36, 0.8); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); margin-right: 4px;">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--secondary);">visibility</span>
+                <span class="label-mono" style="color: var(--secondary);">MODO ESPECTADOR</span>
+              </div>
+
+              <!-- Participantes -->
+              <button class="btn-ctrl" id="btn-ctrl-users" title="Participantes Conectados">
+                <div class="btn-ctrl-icon" style="position: relative;">
+                  <span class="material-symbols-outlined">group</span>
+                </div>
+                <span class="btn-ctrl-label" id="label-ctrl-users">1 Online</span>
+              </button>
+
+              <!-- Dúvidas / Perguntas -->
+              <button class="btn-ctrl" id="btn-ctrl-chat" title="Dúvidas e Chat">
+                <div class="btn-ctrl-icon">
+                  <span class="material-symbols-outlined">chat</span>
+                </div>
+                <span class="btn-ctrl-label">Dúvidas</span>
+              </button>
+
+              <!-- Telemetria WebRTC -->
+              <button class="btn-ctrl" id="btn-ctrl-stats" title="Métricas WebRTC ao Vivo">
+                <div class="btn-ctrl-icon">
+                  <span class="material-symbols-outlined">analytics</span>
+                </div>
+                <span class="btn-ctrl-label">Métricas</span>
+              </button>
+
+              <div class="ctrl-divider"></div>
+
+              <!-- Sair / Encerrar -->
+              <button class="btn-end-stream" id="btn-ctrl-exit" title="Sair da Reunião">
+                <span class="material-symbols-outlined" style="font-size: 18px;">call_end</span>
+                <span>Sair</span>
+              </button>
+
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Coluna Lateral Técnica -->
+        <aside class="sidebar-panel" id="sidebar-panel">
+          
+          <!-- Cabeçalho das Abas -->
+          <div class="sidebar-tabs">
+            <button class="tab-btn active" data-tab="tab-users">
+              <span class="material-symbols-outlined" style="font-size: 16px;">people</span>
+              <span>Efetivo</span>
+              <span class="tab-badge" id="tab-users-count">1</span>
+            </button>
+
+            <button class="tab-btn" data-tab="tab-chat">
+              <span class="material-symbols-outlined" style="font-size: 16px;">chat</span>
+              <span>Dúvidas</span>
+            </button>
+
+            <button class="tab-btn" data-tab="tab-telemetry">
+              <span class="material-symbols-outlined" style="font-size: 16px;">speed</span>
+              <span>Métricas</span>
+            </button>
+          </div>
+
+          <!-- ABA 1: PARTICIPANTES REAIS -->
+          <div class="tab-content active" id="tab-users">
+            <div style="padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+              <span class="label-mono" style="color: var(--tertiary);">PARTICIPANTES REAIS</span>
+              <span class="label-mono" style="color: var(--status-ok);">CONEXÃO SFU</span>
+            </div>
+            
+            <div class="peer-list-wrapper" id="peer-list">
+              <!-- Renderizado dinamicamente via JS com quem realmente estiver conectado -->
+            </div>
+          </div>
+
+          <!-- ABA 2: DÚVIDAS E CHAT REAL -->
+          <div class="tab-content" id="tab-chat">
+            <div style="padding: 10px 12px; border-bottom: 1px solid var(--border-subtle);">
+              <span class="label-mono" style="color: var(--tertiary);">DÚVIDAS & COMUNICAÇÃO EM TEMPO REAL</span>
+            </div>
+
+            <div class="chat-messages" id="chat-messages-container">
+              <div class="empty-state" style="padding: 20px 10px;">
+                Nenhuma mensagem na sala ainda. Envie uma dúvida ou aviso abaixo.
+              </div>
+            </div>
+
+            <div class="chat-input-area">
+              <input type="text" id="chat-input" class="chat-input" placeholder="Escreva uma mensagem ou dúvida...">
+              <button class="btn-send" id="btn-send-chat" title="Enviar">
+                <span class="material-symbols-outlined" style="font-size: 18px;">send</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ABA 3: TELEMETRIA OPERACIONAL WEBRTC -->
+          <div class="tab-content" id="tab-telemetry">
+            <div style="padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between;">
+              <span class="label-mono" style="color: var(--tertiary);">DIAGNÓSTICO WEBRTC</span>
+              <span class="label-mono" id="telemetry-refresh-label" style="color: var(--tertiary-container);">ATUALIZAÇÃO: 1s</span>
+            </div>
+
+            <div class="telemetry-grid">
+              
+              <div class="telemetry-card">
+                <span class="telemetry-title">FPS Real</span>
+                <span class="telemetry-value" id="stat-fps">--</span>
+                <span class="telemetry-sub" id="stat-fps-target">Meta: 60 FPS</span>
+              </div>
+
+              <div class="telemetry-card">
+                <span class="telemetry-title">Resolução</span>
+                <span class="telemetry-value" id="stat-res" style="font-size: 15px; margin-top: 2px;">--</span>
+                <span class="telemetry-sub" id="stat-aspect">Proporção: --</span>
+              </div>
+
+              <div class="telemetry-card">
+                <span class="telemetry-title">Bitrate</span>
+                <span class="telemetry-value" id="stat-bitrate">-- kbps</span>
+                <span class="telemetry-sub">Largura de banda</span>
+              </div>
+
+              <div class="telemetry-card">
+                <span class="telemetry-title">Latência (RTT)</span>
+                <span class="telemetry-value" id="stat-rtt">-- ms</span>
+                <span class="telemetry-sub" id="stat-rtt-status">Tempo de resposta</span>
+              </div>
+
+              <div class="telemetry-card">
+                <span class="telemetry-title">Perda de Pacotes</span>
+                <span class="telemetry-value" id="stat-packet-loss">0.0%</span>
+                <span class="telemetry-sub" id="stat-packet-count">NACKs tratados</span>
+              </div>
+
+              <div class="telemetry-card">
+                <span class="telemetry-title">Jitter</span>
+                <span class="telemetry-value" id="stat-jitter">-- ms</span>
+                <span class="telemetry-sub">Variação de atraso</span>
+              </div>
+
+              <div class="telemetry-card full-width">
+                <span class="telemetry-title">Codec & Transporte</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                  <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 600;" id="stat-codec">H.264 / VP8 (Acel. Hardware)</span>
+                  <span class="badge-tag badge-idle" id="stat-transport-type">UDP</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </aside>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================================================
+       MODAL DE CONFIGURAÇÃO DE TRANSMISSÃO (PRESETS E QUALIDADE)
+       ======================================================================== -->
+  <div class="modal-backdrop" id="modal-settings">
+    <div class="modal-box">
+      
+      <div class="modal-header">
+        <span class="material-symbols-outlined" style="color: var(--primary-container);">settings_input_component</span>
+        <h3>Parâmetros de Compartilhamento de Tela</h3>
+      </div>
+
+      <div class="modal-body">
+        <p>Ajuste os parâmetros para otimizar estabilidade, nitidez ou taxa de quadros (até 60 FPS) conforme o conteúdo transmitido.</p>
+
+        <!-- Presets de Conteúdo -->
+        <div class="form-group">
+          <label>MODO DE OTIMIZAÇÃO (CONTENT HINT)</label>
+          <div class="preset-options">
+            
+            <div class="preset-radio-card selected" data-preset="motion" id="preset-card-motion">
+              <div class="preset-radio-title">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--primary);">sports_esports</span>
+                <span>Alta Fluidez (60 FPS)</span>
+              </div>
+              <span class="preset-radio-desc">Ideal para jogos, simulações táticas em 3D, reprodução de vídeo e animações dinâmicas.</span>
+            </div>
+
+            <div class="preset-radio-card" data-preset="detail" id="preset-card-detail">
+              <div class="preset-radio-title">
+                <span class="material-symbols-outlined" style="font-size: 16px; color: var(--secondary);">description</span>
+                <span>Nitidez Máxima (Texto)</span>
+              </div>
+              <span class="preset-radio-desc">Prioriza texto cristalino, PDFs, documentos operacionais, diagramas e planilhas.</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Limite de Resolução -->
+        <div class="form-group">
+          <label for="select-resolution">RESOLUÇÃO MÁXIMA DA CAPTURA</label>
+          <select id="select-resolution" class="form-control">
+            <option value="1080" selected>1080p (Full HD - 1920x1080)</option>
+            <option value="720">720p (HD - 1280x720)</option>
+            <option value="480">480p (SD - 854x480)</option>
+          </select>
+        </div>
+
+        <!-- Limite de Taxa de Quadros (FPS) -->
+        <div class="form-group">
+          <label for="select-fps">TAXA DE QUADROS MÁXIMA (FPS)</label>
+          <select id="select-fps" class="form-control">
+            <option value="60" selected>Até 60 FPS (quando suportado pelo navegador e hardware)</option>
+            <option value="30">Até 30 FPS (estabilidade equilibrada)</option>
+            <option value="15">Até 15 FPS (baixo consumo de CPU e banda)</option>
+          </select>
+        </div>
+
+        <!-- Opção de Áudio do Sistema -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; text-transform: none; color: #ffffff;">
+            <input type="checkbox" id="check-system-audio" checked style="accent-color: var(--primary-container); width: 16px; height: 16px;">
+            <span>Solicitar captura de áudio do sistema / aba (áudio do computador)</span>
+          </label>
+          <span style="font-size: 11px; color: var(--tertiary); margin-top: 4px; display: block;">
+            Nota: Ao abrir o seletor do navegador, certifique-se de marcar a opção "Compartilhar áudio também" no diálogo nativo.
+          </span>
+        </div>
+
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-modal-cancel" style="width: auto;">Cancelar</button>
+        <button class="btn-primary" id="btn-modal-apply" style="width: auto;">Salvar Preferências</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODAL DE CONFIRMAÇÃO DE SAÍDA
+       ======================================================================== -->
+  <div class="modal-backdrop" id="modal-exit">
+    <div class="modal-box" style="max-width: 440px;">
+      
+      <div class="modal-header">
+        <span class="material-symbols-outlined" style="color: var(--primary-container);">logout</span>
+        <h3>Sair da Sala de Transmissão?</h3>
+      </div>
+
+      <div class="modal-body">
+        <p>Você será desconectado da sessão. Se você estiver transmitindo a tela, o streaming será encerrado para os participantes.</p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-exit-cancel" style="width: auto;">Permanecer</button>
+        <button class="btn-primary" id="btn-exit-confirm" style="width: auto; background-color: var(--primary-container);">Confirmar Saída</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Container de Toasts para Alertas e Feedback -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ========================================================================
+       RODAPÉ
+       ======================================================================== -->
+  <footer>
+    <span>© Polícia Militar do Estado de São Paulo · Transmissão de Instrução</span>
+    <span class="mono" style="font-size: 11px;">WebRTC SFU (mediasoup v3) · 1080p60 Adaptive</span>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="mediasoup-client.bundle.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
