@@ -1,0 +1,7 @@
+node_modules
+.git
+*.zip
+*.log
+.DS_Store
+Thumbs.db
+stitch_pmesp_stream_educacional

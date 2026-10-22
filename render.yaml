@@ -1,11 +1,12 @@
 services:
   - type: web
     name: pmesp-telacompartilhar
-    runtime: node
+    runtime: docker
     plan: free
     region: oregon
-    buildCommand: npm install
-    startCommand: node server.js
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: PORT
-        value: 3000
+        value: 10000
+      - key: NODE_ENV
+        value: production

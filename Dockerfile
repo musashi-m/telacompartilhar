@@ -1,34 +1,41 @@
-# Imagem base oficial Node.js Debian Bookworm com ferramentas de build
-FROM node:22-bookworm-slim
+# Ubuntu 22.04 é idêntico ao ambiente onde o mediasoup compila os binários
+# pré-compilados oficiais (via GitHub Actions), garantindo compatibilidade total
+FROM ubuntu:22.04
 
-# Instala ferramentas essenciais para o mediasoup-worker nativo
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instala Node.js 22 via NodeSource + ferramentas de build (pip, g++, make)
+# necessárias caso o prebuilt falhe e precise compilar localmente
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
     python3 \
     python3-pip \
     build-essential \
-    ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Diretório de trabalho
 WORKDIR /app
 
-# Copia manifestos de dependência
+# Copia manifestos de dependências
 COPY package*.json ./
 
-# Instala todas as dependências e compila os binários
+# Instala dependências (mediasoup prebuilt roda direto no Ubuntu 22.04)
 RUN npm install
 
-# Copia todo o código da aplicação
+# Copia código-fonte da aplicação
 COPY . .
 
-# Garante que o bundle do cliente WebRTC esteja gerado
+# Gerar bundle do cliente mediasoup
 RUN npm run bundle
 
-# Configuração de portas (Hugging Face Spaces usa 7860 por padrão)
-ENV PORT=7860
+# Porta padrão do Render
+ENV PORT=10000
 ENV NODE_ENV=production
 
-EXPOSE 7860
+EXPOSE 10000
 
-# Inicializa o servidor SFU
+# Iniciar servidor
 CMD ["node", "server.js"]
