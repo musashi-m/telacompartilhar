@@ -1,12 +1,14 @@
 FROM node:20-bookworm-slim
 
-# Instalar dependências de compilação necessárias para o worker C++ do mediasoup
+# Instalar dependências necessárias para o mediasoup compilar seu worker nativo
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
+    python3-pip \
     make \
     g++ \
     gcc \
     ca-certificates \
+    && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,7 +16,7 @@ WORKDIR /app
 # Copiar manifests de pacotes
 COPY package*.json ./
 
-# Instalar dependências
+# Instalar dependências (o mediasoup compilará o worker usando python3 -m pip)
 RUN npm install
 
 # Copiar código-fonte da aplicação
