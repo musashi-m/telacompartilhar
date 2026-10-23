@@ -168,12 +168,19 @@ wss.on('connection', (ws) => {
               hostToken: generatedHostToken,
               password: cleanPin,
               peers: new Map(),
+              bannedPeerIds: new Set(),
               hasActiveStream: false
             };
             rooms.set(cleanRoomId, room);
             console.log(`[Sala ${cleanRoomId}] Nova sala criada por "${displayName}" (${peerId})${room.password ? ' [PROTEGIDA POR SENHA]' : ''}`);
           } else {
             room = rooms.get(cleanRoomId);
+
+            // Verifica se o participante foi expulso pelo instrutor desta sala
+            if (room.bannedPeerIds && room.bannedPeerIds.has(peerId)) {
+              console.log(`[Sala ${cleanRoomId}] Entrada recusada: Aluno "${displayName}" (${peerId}) foi expulso.`);
+              return sendResponse(id, null, 'VOCE_FOI_EXPULSO');
+            }
 
             // Validação de Host persistente (se possuir o hostToken emitido na criação ou mesmo peerId)
             const isHostAttempt = Boolean(
@@ -434,6 +441,76 @@ wss.on('connection', (ws) => {
           currentRoomId = null;
 
           sendResponse(id, { ended: true, roomId: closingRoomId });
+          break;
+        }
+
+        // Expulsar aluno/participante da sala (exclusivo para o instrutor)
+        case 'kickPeer': {
+          const room = rooms.get(currentRoomId);
+          if (!room) throw new Error('Sala não encontrada.');
+
+          if (room.creatorPeerId !== currentPeerId) {
+            throw new Error('Apenas o instrutor possui autorização para expulsar participantes.');
+          }
+
+          const { targetPeerId, reason } = data || {};
+          if (!targetPeerId) {
+            throw new Error('ID do participante não informado.');
+          }
+
+          if (targetPeerId === currentPeerId) {
+            throw new Error('O instrutor não pode expulsar a si mesmo.');
+          }
+
+          const targetPeer = room.peers.get(targetPeerId);
+          if (!targetPeer) {
+            throw new Error('Participante não está mais conectado na sala.');
+          }
+
+          const targetName = targetPeer.displayName;
+          const kickReason = (reason && String(reason).trim()) ? String(reason).trim() : 'Você foi desconectado da sala pelo instrutor.';
+          const instructorName = room.peers.get(currentPeerId)?.displayName || 'Instrutor';
+
+          // Adiciona à lista de banidos da sala para bloquear retorno imediato
+          if (!room.bannedPeerIds) {
+            room.bannedPeerIds = new Set();
+          }
+          room.bannedPeerIds.add(targetPeerId);
+
+          console.log(`[Sala ${currentRoomId}] Instrutor "${instructorName}" expulsou o aluno "${targetName}" (${targetPeerId}). Motivo: "${kickReason}"`);
+
+          // Notifica o aluno expulso com evento específico
+          sendToPeer(room, targetPeerId, {
+            type: 'notification',
+            event: 'kicked',
+            reason: kickReason,
+            kickedBy: instructorName
+          });
+
+          // Remove o peer da sala
+          room.peers.delete(targetPeerId);
+
+          // Notifica os demais participantes sobre a saída do expulso
+          broadcastToRoom(room, {
+            type: 'notification',
+            event: 'peerLeft',
+            peerId: targetPeerId,
+            reason: 'kicked',
+            displayName: targetName
+          });
+
+          // Encerra a conexão WebSocket do aluno com segurança após envio da notificação
+          setTimeout(() => {
+            try {
+              if (targetPeer.ws && targetPeer.ws.readyState === WebSocket.OPEN) {
+                targetPeer.ws.close();
+              }
+            } catch (e) {
+              console.warn(`[WS] Erro ao fechar socket do peer expulso ${targetPeerId}:`, e.message);
+            }
+          }, 300);
+
+          sendResponse(id, { success: true, kickedPeerId: targetPeerId, displayName: targetName });
           break;
         }
 

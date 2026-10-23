@@ -897,6 +897,35 @@ main {
   color: var(--tertiary);
 }
 
+.btn-kick-peer {
+  background: transparent;
+  border: 1px solid rgba(255, 138, 128, 0.25);
+  color: #ff8a80;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.btn-kick-peer:hover {
+  background: rgba(211, 47, 47, 0.25);
+  border-color: var(--status-error);
+  color: #ffffff;
+}
+
+.btn-kick-peer:active {
+  transform: scale(0.95);
+}
+
+.btn-kick-peer .material-symbols-outlined {
+  font-size: 14px;
+}
+
 /* Chat e Dúvidas Reais */
 .chat-messages {
   flex: 1;

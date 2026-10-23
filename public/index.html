@@ -708,6 +708,69 @@
     </div>
   </div>
 
+  <!-- ========================================================================
+       MODAL DE CONFIRMAÇÃO DE EXPULSÃO DE ALUNO (EXCLUSIVO INSTRUTOR)
+       ======================================================================== -->
+  <div class="modal-backdrop" id="modal-kick">
+    <div class="modal-box" style="max-width: 480px;">
+      
+      <div class="modal-header">
+        <span class="material-symbols-outlined" style="color: var(--status-error);" id="modal-kick-icon">person_remove</span>
+        <h3 id="modal-kick-title">Expulsar Participante</h3>
+      </div>
+
+      <div class="modal-body">
+        <p id="modal-kick-desc">Tem certeza que deseja desconectar o aluno <strong id="modal-kick-name" style="color: #ffffff;"></strong> da sala de instrução?</p>
+        
+        <div class="form-group" style="margin-top: 14px; margin-bottom: 0;">
+          <label for="input-kick-reason">MOTIVO DA EXPULSÃO (OPCIONAL)</label>
+          <input type="text" id="input-kick-reason" class="form-control" placeholder="Ex: Conduta inadequada, instrução restrita..." maxlength="100">
+          <span style="font-size: 11px; color: var(--tertiary); margin-top: 4px; display: block;">
+            O aluno receberá esta justificativa ao ser desconectado e terá a reentrada bloqueada nesta sessão.
+          </span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-kick-cancel" style="width: auto;">Cancelar</button>
+        <button class="btn-primary" id="btn-kick-confirm" style="width: auto; background-color: var(--status-error); border-color: var(--status-error);">
+          <span class="material-symbols-outlined" style="font-size: 16px;">person_remove</span>
+          <span>Confirmar Expulsão</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODAL DE NOTIFICAÇÃO DE EXPULSÃO (EXIBIDO AO ALUNO EXPULSO)
+       ======================================================================== -->
+  <div class="modal-backdrop" id="modal-kicked-alert">
+    <div class="modal-box" style="max-width: 460px; border-color: rgba(255, 138, 128, 0.4);">
+      
+      <div class="modal-header">
+        <span class="material-symbols-outlined" style="color: var(--status-error); font-size: 28px;">gavel</span>
+        <h3 style="color: #ff8a80;">Desconectado da Instrução</h3>
+      </div>
+
+      <div class="modal-body">
+        <p>Você foi <strong>expulso da sala de instrução</strong> pelo instrutor responsável.</p>
+        
+        <div style="margin-top: 12px; padding: 12px; background: rgba(211, 47, 47, 0.12); border: 1px solid rgba(211, 47, 47, 0.3); border-radius: var(--radius-sm);">
+          <span style="font-size: 11px; color: var(--tertiary); text-transform: uppercase; font-family: var(--font-mono); display: block; margin-bottom: 4px;">Motivo informado:</span>
+          <span id="modal-kicked-reason" style="font-size: 13px; color: #ffffff; font-weight: 500;">Você foi desconectado da sala pelo instrutor.</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-primary" id="btn-kicked-alert-ok" style="width: 100%;">
+          <span>Entendido, Retornar ao Início</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Container de Toasts para Alertas e Feedback -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -720,6 +783,6 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="js/app.js?v=20261022_4"></script>
+  <script src="js/app.js?v=20261022_5"></script>
 </body>
 </html>

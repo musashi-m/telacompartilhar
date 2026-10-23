@@ -65,6 +65,7 @@
 
     // Participantes e Mensagens Reais
     peers: new Map(), // peerId -> { id, displayName, role }
+    peerToKick: null, // Aluno selecionado para expulsão
 
     // Telemetria
     statsInterval: null,
@@ -199,6 +200,16 @@
     modalExitDesc: document.getElementById('modal-exit-desc'),
     btnExitCancel: document.getElementById('btn-exit-cancel'),
     btnExitConfirm: document.getElementById('btn-exit-confirm'),
+
+    // Modal de Expulsão e Alerta
+    modalKick: document.getElementById('modal-kick'),
+    modalKickName: document.getElementById('modal-kick-name'),
+    inputKickReason: document.getElementById('input-kick-reason'),
+    btnKickCancel: document.getElementById('btn-kick-cancel'),
+    btnKickConfirm: document.getElementById('btn-kick-confirm'),
+    modalKickedAlert: document.getElementById('modal-kicked-alert'),
+    modalKickedReason: document.getElementById('modal-kicked-reason'),
+    btnKickedAlertOk: document.getElementById('btn-kicked-alert-ok'),
 
     toastContainer: document.getElementById('toast-container')
   };
@@ -473,19 +484,43 @@
 
       // Participante desconectado da sala
       case 'peerLeft': {
-        const { peerId } = notification;
+        const { peerId, reason, displayName } = notification;
+        let leftName = displayName;
         if (state.peers.has(peerId)) {
-          const name = state.peers.get(peerId).displayName;
+          leftName = state.peers.get(peerId).displayName;
           state.peers.delete(peerId);
           renderPeerList();
-          showToast(`${name} saiu da sala`, 'info');
         }
         // Fecha a peer connection associada
         closePeerConnection(peerId);
 
+        if (reason === 'kicked') {
+          // Se não for o próprio instrutor (que já recebeu confirmação na ação)
+          if (!state.isHost) {
+            showToast(`${leftName || 'Um participante'} foi desconectado pelo instrutor`, 'warn', 5000);
+          }
+        } else {
+          showToast(`${leftName || 'Participante'} saiu da sala`, 'info');
+        }
+
         // Se o host saiu, volta ao estado de espera
         if (peerId === state.creatorPeerId && !state.isHost) {
           showWaitingState();
+        }
+        break;
+      }
+
+      // Aluno expulso da sala pelo instrutor
+      case 'kicked': {
+        const reason = notification.reason || 'Você foi desconectado da sala pelo instrutor.';
+        if (dom.modalKickedReason) {
+          dom.modalKickedReason.textContent = reason;
+        }
+        await exitRoomToLobby();
+        if (dom.modalKickedAlert) {
+          dom.modalKickedAlert.classList.add('active');
+        } else {
+          alert(`Desconectado da instrução: ${reason}`);
         }
         break;
       }
@@ -1470,11 +1505,31 @@
             <div class="peer-role">${isPeerHost ? 'INSTRUTOR / CRIADOR' : 'ESPECTADOR'}</div>
           </div>
         </div>
-        <div style="display: flex; gap: 4px; color: ${isPeerHost ? 'var(--primary)' : 'var(--tertiary)'};">
-          ${isPeerHost ? '<span class="material-symbols-outlined" style="font-size: 16px;" title="Instrutor da Sala">school</span>' : '<span class="material-symbols-outlined" style="font-size: 16px;">visibility</span>'}
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="display: flex; gap: 4px; color: ${isPeerHost ? 'var(--primary)' : 'var(--tertiary)'};">
+            ${isPeerHost ? '<span class="material-symbols-outlined" style="font-size: 16px;" title="Instrutor da Sala">school</span>' : '<span class="material-symbols-outlined" style="font-size: 16px;">visibility</span>'}
+          </div>
+          ${(state.isHost && !isPeerHost) ? `
+            <button class="btn-kick-peer" data-peer-id="${escapeHtml(peer.id)}" data-peer-name="${escapeHtml(peer.displayName)}" title="Expulsar este aluno da sala">
+              <span class="material-symbols-outlined">person_remove</span>
+              <span>Expulsar</span>
+            </button>
+          ` : ''}
         </div>
       `;
       dom.peerList.appendChild(item);
+    }
+
+    // Vincula ação aos botões de expulsar caso seja o instrutor
+    if (state.isHost) {
+      dom.peerList.querySelectorAll('.btn-kick-peer').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const targetId = btn.getAttribute('data-peer-id');
+          const targetName = btn.getAttribute('data-peer-name');
+          openKickModal(targetId, targetName);
+        });
+      });
     }
 
     // Atualiza contadores
@@ -1822,6 +1877,9 @@
           dom.joinPassword.focus();
         }
         showToast('Senha incorreta! Digite o PIN numérico de 4 dígitos configurado pelo instrutor.', 'error', 6000);
+      } else if (err.message === 'VOCE_FOI_EXPULSO') {
+        showToast('Acesso negado: você foi expulso desta sala pelo instrutor.', 'error', 8000);
+        alert('Acesso negado: Você foi expulso desta sala de instrução pelo instrutor e não possui autorização para retornar.');
       } else {
         showToast(`Falha ao entrar na sala: ${err.message}`, 'error');
       }
@@ -1903,6 +1961,51 @@
       console.error('[EndRoom] Erro ao encerrar aula:', err);
       showToast(`Falha ao encerrar a aula: ${err.message}`, 'error');
       dom.modalExit.classList.remove('active');
+    }
+  }
+
+  // ========================================================================
+  // EXPULSÃO DE ALUNOS / PARTICIPANTES (EXCLUSIVO INSTRUTOR)
+  // ========================================================================
+  function openKickModal(peerId, peerName) {
+    if (!state.isHost) return;
+    state.peerToKick = { id: peerId, name: peerName };
+    if (dom.modalKickName) dom.modalKickName.textContent = peerName;
+    if (dom.inputKickReason) {
+      dom.inputKickReason.value = '';
+    }
+    if (dom.modalKick) {
+      dom.modalKick.classList.add('active');
+      setTimeout(() => {
+        if (dom.inputKickReason) dom.inputKickReason.focus();
+      }, 100);
+    }
+  }
+
+  function closeKickModal() {
+    state.peerToKick = null;
+    if (dom.modalKick) dom.modalKick.classList.remove('active');
+  }
+
+  async function confirmKickPeer() {
+    if (!state.isHost || !state.peerToKick) return;
+    const { id, name } = state.peerToKick;
+    const reason = dom.inputKickReason ? dom.inputKickReason.value.trim() : '';
+
+    try {
+      closeKickModal();
+      showToast(`Desconectando ${name}...`, 'info');
+      await sendRequest('kickPeer', { targetPeerId: id, reason });
+
+      // Fecha a peer connection localmente
+      closePeerConnection(id);
+      state.peers.delete(id);
+      renderPeerList();
+
+      showToast(`Aluno "${name}" foi expulso da sala com sucesso.`, 'ok', 5000);
+    } catch (err) {
+      console.error('[KickPeer] Erro ao expulsar aluno:', err);
+      showToast(`Falha ao expulsar aluno: ${err.message}`, 'error');
     }
   }
 
@@ -2247,6 +2350,27 @@
         leaveRoom();
       }
     });
+
+    // Modal de Expulsão de Aluno
+    if (dom.btnKickCancel) {
+      on(dom.btnKickCancel, 'click', closeKickModal);
+    }
+    if (dom.btnKickConfirm) {
+      on(dom.btnKickConfirm, 'click', confirmKickPeer);
+    }
+    if (dom.inputKickReason) {
+      on(dom.inputKickReason, 'keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmKickPeer();
+        }
+      });
+    }
+    if (dom.btnKickedAlertOk) {
+      on(dom.btnKickedAlertOk, 'click', () => {
+        if (dom.modalKickedAlert) dom.modalKickedAlert.classList.remove('active');
+      });
+    }
 
     // Desbloqueio Global de Áudio (Autoplay Policy do Navegador)
     document.addEventListener('click', unlockAudio, { passive: true });
